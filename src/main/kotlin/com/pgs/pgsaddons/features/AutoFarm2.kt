@@ -57,7 +57,6 @@ enum class AutoFarmAction(val id: String, val label: String) {
 object AutoFarm2 {
     private val mc = MinecraftClient.getInstance()
     lateinit var toggleKey: KeyBinding
-    lateinit var toggleAttackModeKey: KeyBinding
 
     private enum class Cycle { C1, C2, C3 }
 
@@ -101,13 +100,9 @@ object AutoFarm2 {
         toggleKey = KeyBindingHelper.registerKeyBinding(
             KeyBinding("PGS Toggle Auto Farm 2.0", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_U, KeyBinding.Category.MISC)
         )
-        toggleAttackModeKey = KeyBindingHelper.registerKeyBinding(
-            KeyBinding("PGS Toggle Auto Farm Attack Mode", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, KeyBinding.Category.MISC)
-        )
 
         ClientTickEvents.END_CLIENT_TICK.register { client ->
             while (toggleKey.wasPressed()) toggle()
-            while (toggleAttackModeKey.wasPressed()) toggleAttackMode()
             tick(client)
         }
 
@@ -123,13 +118,6 @@ object AutoFarm2 {
                 }
             }
         }
-    }
-
-    fun toggleAttackMode() {
-        Settings.general.autoFarm2ToggleAttackMode = !Settings.general.autoFarm2ToggleAttackMode
-        val mode = if (Settings.general.autoFarm2ToggleAttackMode) "Toggle" else "Hold"
-        message("Attack mode: $mode")
-        Settings.save()
     }
 
     fun toggle() {

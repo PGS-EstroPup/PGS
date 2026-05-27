@@ -3,7 +3,6 @@ package com.pgs.pgsaddons
 import com.pgs.pgsaddons.features.SlotSwap
 import com.pgs.pgsaddons.features.Timer
 import com.pgs.pgsaddons.features.CustomEsp
-import com.pgs.pgsaddons.features.AutoFarm2
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import com.pgs.pgsaddons.utils.PgsSliderWidget
 import net.minecraft.client.gui.Click
@@ -82,7 +81,7 @@ class SettingsScreen : Screen(Text.empty()) {
             option("Deployables Tracker", toggle(Settings.general.deployablesTrackerEnabled) { Settings.general.deployablesTrackerEnabled = it }),
             option("Keep this on <3", toggle(Settings.general.minireenasOverlayEnabled) { Settings.general.minireenasOverlayEnabled = it }),
             option("Menu Color", menuColor),
-            keybindOption("Attack Mode", AutoFarm2.toggleAttackModeKey, "Toggles Auto Farm Start Farm between hold attack mode and toggle/click attack mode.")
+            keybindOption("Attack / Destroy", client!!.options.attackKey, "Changes Minecraft's Controls > Attack/Destroy binding.")
         ))
 
         val timerInput = TextFieldWidget(textRenderer, 0, 0, 100, 20, Text.literal("Set timer"))
