@@ -1,0 +1,25 @@
+# Gradle / build output
+.gradle/
+.gradle-home/
+.kotlin/
+build/
+bin/
+
+# IDE / local workspace
+.idea/
+*.iml
+
+# Runtime output and local configs
+run/
+
+# JVM dumps and generated diagnostics
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# Logs and temporary build diagnostics
+*.log
+build*.txt
+full_build_log.txt
+output.txt
+deps.txt

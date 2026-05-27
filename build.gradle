@@ -1,0 +1,122 @@
+plugins {
+    id 'fabric-loom' version '1.14.7'
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '2.1.0'
+}
+
+group = 'com.pgs'
+
+version = '1.11.3'
+base {
+    archivesName = "PGS"
+}
+
+def minecraftVersion = project.findProperty("minecraft_version") ?: "1.21.11"
+def yarnMappings = project.findProperty("yarn_mappings") ?: "${minecraftVersion}+build.5"
+def fabricApiVersion = project.findProperty("fabric_api_version") ?: "0.141.4+${minecraftVersion}"
+def hasMinecraftVersionOverride = project.hasProperty("minecraft_version")
+
+tasks.withType(Jar).configureEach {
+    archiveVersion = "${version}+mc${minecraftVersion}"
+}
+
+tasks.named("remapJar").configure {
+    archiveVersion = "${project.version}+mc${minecraftVersion}"
+}
+
+tasks.register("buildMinecraft12110", GradleBuild) {
+    group = "build"
+    description = "Builds the Minecraft 1.21.10 jar."
+    dir = projectDir
+    tasks = ["build"]
+    startParameter.projectProperties = [
+            "minecraft_version"  : "1.21.10",
+            "yarn_mappings"      : "1.21.10+build.3",
+            "fabric_api_version" : "0.138.4+1.21.10"
+    ]
+}
+
+tasks.register("buildAllMinecraftVersions") {
+    group = "build"
+    description = "Builds jars for every supported Minecraft version."
+    dependsOn("build", "buildMinecraft12110")
+}
+
+if (!hasMinecraftVersionOverride) {
+    tasks.named("build").configure {
+        finalizedBy("buildMinecraft12110")
+    }
+}
+
+
+repositories {
+    mavenCentral()
+    maven { url "https://maven.fabricmc.net/" }
+    flatDir {
+        dirs "C:/ModDev"
+    }
+}
+
+loom {
+    mixin {
+        defaultRefmapName.set("pgs_addons-refmap.json")
+        useLegacyMixinAp = true
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraftVersion}"
+    mappings "net.fabricmc:yarn:${yarnMappings}:v2"
+
+    modImplementation "net.fabricmc:fabric-loader:0.19.2"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+
+    // Kotlin support for Fabric
+    modImplementation "net.fabricmc:fabric-language-kotlin:1.13.0+kotlin.2.1.0"
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand(
+                "version": project.version,
+                "minecraft_dependency": ">=1.21.10 <=1.21.11",
+                "fabric_dependency": ">=0.138.4"
+        )
+    }
+}
+
+sourceSets {
+    main {
+        kotlin {
+            srcDirs = ['src/main/kotlin', 'src/main/java']
+            if (minecraftVersion == "1.21.10") {
+                srcDir 'src/compat/1.21.10/java'
+            } else {
+                srcDir 'src/compat/1.21.11/java'
+            }
+        }
+        java {
+            srcDirs = ['src/main/java']
+            if (minecraftVersion == "1.21.10") {
+                srcDir 'src/compat/1.21.10/java'
+            } else {
+                srcDir 'src/compat/1.21.11/java'
+            }
+        }
+    }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    options.encoding = 'UTF-8'
+}

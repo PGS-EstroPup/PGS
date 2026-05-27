@@ -1,0 +1,320 @@
+package com.pgs.pgsaddons;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+public class Settings {
+   private static final Gson GSON = (new GsonBuilder()).setPrettyPrinting().create();
+   private static final Path CONFIG_PATH = Path.of("config", "pgs_addons.json");
+   public static final Settings.Config general = new Settings.Config();
+
+   public static void save() {
+      try {
+         Files.createDirectories(CONFIG_PATH.getParent());
+         String json = GSON.toJson(general);
+         Files.writeString(CONFIG_PATH, json);
+      } catch (IOException var1) {
+         System.err.println("[pgs_addons] Failed to save config: " + var1);
+      }
+   }
+
+   public static void load() {
+      try {
+         if (Files.exists(CONFIG_PATH)) {
+            String json = Files.readString(CONFIG_PATH);
+            Settings.Config loaded = GSON.fromJson(json, Settings.Config.class);
+            if (loaded != null) {
+               general.autofish = loaded.autofish;
+               general.autofishRange = loaded.autofishRange;
+               general.iHateDioriteEnabled = loaded.iHateDioriteEnabled;
+               general.pestEspEnabled = json.contains("\"pestEspEnabled\"") ? loaded.pestEspEnabled : true;
+               general.mobEspColorIndex = clamp(loaded.mobEspColorIndex, 0, 7);
+               general.pestEspTracersEnabled = json.contains("\"pestEspTracersEnabled\"") ? loaded.pestEspTracersEnabled : true;
+               general.pestEspColor = json.contains("\"pestEspColor\"") ? loaded.pestEspColor : colorFromIndex(general.mobEspColorIndex);
+               general.pestTimersEnabled = json.contains("\"pestTimersEnabled\"") ? loaded.pestTimersEnabled : true;
+               general.pestTimersX = json.contains("\"pestTimersX\"") ? loaded.pestTimersX : general.pestTimersX;
+               general.pestTimersY = json.contains("\"pestTimersY\"") ? loaded.pestTimersY : general.pestTimersY;
+               general.witherDoorEspEnabled = loaded.witherDoorEspEnabled;
+               general.witherDoorEspTracersEnabled = json.contains("\"witherDoorEspTracersEnabled\"") ? loaded.witherDoorEspTracersEnabled : true;
+               general.bloodDoorEspEnabled = loaded.bloodDoorEspEnabled;
+               general.bloodDoorEspTracersEnabled = json.contains("\"bloodDoorEspTracersEnabled\"") ? loaded.bloodDoorEspTracersEnabled : true;
+               general.keyHighlightEnabled = loaded.keyHighlightEnabled;
+               general.keyHighlightTracersEnabled = json.contains("\"keyHighlightTracersEnabled\"") ? loaded.keyHighlightTracersEnabled : true;
+               general.noTerminatorSwingEnabled = loaded.noTerminatorSwingEnabled;
+               general.showOwnNametag = loaded.showOwnNametag;
+               general.menuColor = json.contains("\"menuColor\"") ? loaded.menuColor : general.menuColor;
+               general.starredMobEspEnabled = loaded.starredMobEspEnabled;
+               general.starredMobEspTracersEnabled = json.contains("\"starredMobEspTracersEnabled\"") ? loaded.starredMobEspTracersEnabled : true;
+               general.starredMobEspColorIndex = loaded.starredMobEspColorIndex;
+               general.starredMobEspColor = json.contains("\"starredMobEspColor\"") ? loaded.starredMobEspColor : colorFromIndex(general.starredMobEspColorIndex);
+               general.deployablesTrackerEnabled = loaded.deployablesTrackerEnabled;
+               general.alertOnTotemExpiresSoon = loaded.alertOnTotemExpiresSoon;
+               general.alertOnBlackHoleExpiresSoon = loaded.alertOnBlackHoleExpiresSoon;
+               general.alertOnFlareExpiresSoon = loaded.alertOnFlareExpiresSoon;
+               general.remainingTimeTotem = loaded.remainingTimeTotem;
+               general.remainingTimeBlackHole = loaded.remainingTimeBlackHole;
+               general.remainingTimeFlare = loaded.remainingTimeFlare;
+               general.deployablesOverlayX = loaded.deployablesOverlayX;
+               general.deployablesOverlayY = loaded.deployablesOverlayY;
+               general.autofishWithKillerEnabled = loaded.autofishWithKillerEnabled;
+               general.autofishRodSlot = loaded.autofishRodSlot;
+               general.killingItemSlot = loaded.killingItemSlot;
+               general.killingSwingCount = loaded.killingSwingCount;
+               general.killingSwingCount = loaded.killingSwingCount;
+               general.slotSwapRecordMode = loaded.slotSwapRecordMode;
+               if (loaded.savedSwapSlots != null) {
+                  general.savedSwapSlots = loaded.savedSwapSlots;
+               }
+               general.slotSwapEnabled = loaded.slotSwapEnabled;
+               general.macroCheckEnabled = loaded.macroCheckEnabled;
+               if (loaded.macroCheckAlertText != null) {
+                  general.macroCheckAlertText = loaded.macroCheckAlertText;
+               }
+               general.nodeRenderMode = clamp(loaded.nodeRenderMode, 0, 2);
+               general.zeroTickHardstoneEnabled = loaded.zeroTickHardstoneEnabled;
+               general.ChestHighlightEnabled = loaded.ChestHighlightEnabled;
+               general.chestHighlightTracersEnabled = json.contains("\"chestHighlightTracersEnabled\"") ? loaded.chestHighlightTracersEnabled : true;
+               general.powderChestHudEnabled = loaded.powderChestHudEnabled;
+               general.powderChestHudX = loaded.powderChestHudX;
+               general.powderChestHudY = loaded.powderChestHudY;
+               general.autoHarpEnabled = loaded.autoHarpEnabled;
+               general.autoHarpCooldown = loaded.autoHarpCooldown;
+               if (loaded.timerDuration != null) {
+                  general.timerDuration = loaded.timerDuration;
+               }
+               if (loaded.timerCommand != null) {
+                  general.timerCommand = loaded.timerCommand;
+               }
+               general.timerHudX = loaded.timerHudX;
+               general.timerHudY = loaded.timerHudY;
+               general.slotSwapHudEnabled = loaded.slotSwapHudEnabled;
+               general.slotSwapHudX = loaded.slotSwapHudX;
+               general.slotSwapHudY = loaded.slotSwapHudY;
+               general.equipmentStatsHudEnabled = loaded.equipmentStatsHudEnabled;
+               general.equipmentStatsHudX = loaded.equipmentStatsHudX;
+               general.equipmentStatsHudY = loaded.equipmentStatsHudY;
+               general.arrowTypeTrackerEnabled = loaded.arrowTypeTrackerEnabled;
+               general.tpMazeTracerEnabled = loaded.tpMazeTracerEnabled;
+               general.arrowTypeTrackerX = loaded.arrowTypeTrackerX;
+               general.arrowTypeTrackerY = loaded.arrowTypeTrackerY;
+               general.pinglessMiningEnabled = loaded.pinglessMiningEnabled;
+               general.pinglessMiningDebugEnabled = loaded.pinglessMiningDebugEnabled;
+               general.tpsSyncEnabled = json.contains("\"tpsSyncEnabled\"") ? loaded.tpsSyncEnabled : true;
+               general.miningTickOverride = clamp(loaded.miningTickOverride, 0, 2);
+               general.tpsSyncMinimumTps = clamp(loaded.tpsSyncMinimumTps, 0.1F, 20.0F);
+               general.tpsSyncMaximumTps = clamp(loaded.tpsSyncMaximumTps, general.tpsSyncMinimumTps, 20.0F);
+               general.littlefootEspEnabled = loaded.littlefootEspEnabled;
+               general.littlefootEspTracersEnabled = json.contains("\"littlefootEspTracersEnabled\"") ? loaded.littlefootEspTracersEnabled : true;
+               general.littlefootEspColorIndex = loaded.littlefootEspColorIndex;
+               general.littlefootEspColor = json.contains("\"littlefootEspColor\"") ? loaded.littlefootEspColor : colorFromIndex(general.littlefootEspColorIndex);
+               if (loaded.extraOreSpeed != null) {
+                  general.extraOreSpeed = loaded.extraOreSpeed;
+               }
+               if (loaded.extraBlockSpeed != null) {
+                  general.extraBlockSpeed = loaded.extraBlockSpeed;
+               }
+               if (loaded.extraGemstoneSpeed != null) {
+                  general.extraGemstoneSpeed = loaded.extraGemstoneSpeed;
+               }
+               if (loaded.extraDwarvenMetalSpeed != null) {
+                  general.extraDwarvenMetalSpeed = loaded.extraDwarvenMetalSpeed;
+               }
+               general.minireenasOverlayEnabled = json.contains("\"minireenasOverlayEnabled\"") ? loaded.minireenasOverlayEnabled : true;
+               general.customEspEnabled = loaded.customEspEnabled;
+               general.customEspTracersEnabled = json.contains("\"customEspTracersEnabled\"") ? loaded.customEspTracersEnabled : true;
+               general.customEspColorIndex = loaded.customEspColorIndex;
+               general.customEspColor = json.contains("\"customEspColor\"") ? loaded.customEspColor : colorFromIndex(general.customEspColorIndex);
+               if (loaded.customEspNames != null) {
+                  general.customEspNames = loaded.customEspNames;
+               }
+               general.autoFarm2Enabled = loaded.autoFarm2Enabled;
+               general.autoFarm2ToggleAttackMode = loaded.autoFarm2ToggleAttackMode;
+               general.autoFarm2HoeSlot = clamp(loaded.autoFarm2HoeSlot, 1, 9);
+               general.autoFarm2MousematSlot = clamp(loaded.autoFarm2MousematSlot, 1, 9);
+               general.autoFarm2RodSlot = clamp(loaded.autoFarm2RodSlot, 1, 9);
+               general.autoFarm2VacuumSlot = clamp(loaded.autoFarm2VacuumSlot, 1, 9);
+               general.autoFarm2PestSpawnOffsetSeconds = Math.max(0, loaded.autoFarm2PestSpawnOffsetSeconds);
+               if (loaded.autoFarm2PlotName != null) {
+                  general.autoFarm2PlotName = loaded.autoFarm2PlotName;
+               }
+               if (loaded.autoFarm2ArmorSlot1 != null) {
+                  general.autoFarm2ArmorSlot1 = loaded.autoFarm2ArmorSlot1;
+               }
+               if (loaded.autoFarm2ArmorSlot2 != null) {
+                  general.autoFarm2ArmorSlot2 = loaded.autoFarm2ArmorSlot2;
+               }
+               if (loaded.autoFarm2ArmorSlot3 != null) {
+                  general.autoFarm2ArmorSlot3 = loaded.autoFarm2ArmorSlot3;
+               }
+               if (loaded.autoFarm2Cycle1 != null) {
+                  general.autoFarm2Cycle1 = loaded.autoFarm2Cycle1;
+               }
+               if (loaded.autoFarm2Cycle2 != null) {
+                  general.autoFarm2Cycle2 = loaded.autoFarm2Cycle2;
+               }
+               if (loaded.autoFarm2Cycle3 != null) {
+                  general.autoFarm2Cycle3 = loaded.autoFarm2Cycle3;
+               }
+            }
+         } else {
+            save();
+         }
+      } catch (Exception var2) {
+         System.err.println("[pgs_addons] Failed to load config: " + var2);
+      }
+   }
+
+   public static class Config {
+      public boolean autofish = true;
+      public int autofishRange = 30;
+      public boolean iHateDioriteEnabled = true;
+      public boolean pestEspEnabled = true;
+      public int mobEspColorIndex = 0;
+      public boolean pestEspTracersEnabled = true;
+      public int pestEspColor = Settings.colorFromIndex(0);
+      public boolean pestTimersEnabled = true;
+      public int pestTimersX = 10;
+      public int pestTimersY = 200;
+      public boolean witherDoorEspEnabled = true;
+      public boolean witherDoorEspTracersEnabled = true;
+      public boolean bloodDoorEspEnabled = true;
+      public boolean bloodDoorEspTracersEnabled = true;
+      public boolean keyHighlightEnabled = true;
+      public boolean keyHighlightTracersEnabled = true;
+      public boolean noTerminatorSwingEnabled = true;
+      public boolean showOwnNametag = false;
+      public int menuColor = 0x555555;
+      public boolean starredMobEspEnabled = true;
+      public boolean starredMobEspTracersEnabled = true;
+      public int starredMobEspColorIndex = 0;
+      public int starredMobEspColor = Settings.colorFromIndex(0);
+      public boolean deployablesTrackerEnabled = true;
+      public boolean alertOnTotemExpiresSoon = true;
+      public boolean alertOnBlackHoleExpiresSoon = true;
+      public boolean slotSwapEnabled = false;
+      public boolean slotSwapRecordMode = false;
+      public List<Integer> savedSwapSlots = new ArrayList<>();
+      public boolean alertOnFlareExpiresSoon = true;
+      public boolean remainingTimeTotem = true;
+      public boolean remainingTimeBlackHole = true;
+      public boolean remainingTimeFlare = true;
+      public int deployablesOverlayX = 10;
+      public int deployablesOverlayY = 10;
+      public boolean autofishWithKillerEnabled = false;
+      public int autofishRodSlot = 0; // 1-9 (interactor) vs 0-8 (internal)
+      public int killingItemSlot = 1; // 1-9
+      public int killingSwingCount = 1; // 1-5
+      public boolean macroCheckEnabled = false;
+      public String macroCheckAlertText = "MACRO CHECK!";
+      public int nodeRenderMode = 0;
+      public boolean zeroTickHardstoneEnabled = false;
+      public boolean ChestHighlightEnabled = true;
+      public boolean chestHighlightTracersEnabled = true;
+      public boolean powderChestHudEnabled = true;
+      public int powderChestHudX = 10;
+      public int powderChestHudY = 160;
+      public boolean autoHarpEnabled = false;
+      public int autoHarpCooldown = 0;
+      public String timerDuration = "2m 30s";
+      public String timerCommand = "";
+      public int timerHudX = 10;
+      public int timerHudY = 220;
+      public boolean slotSwapHudEnabled = false;
+      public int slotSwapHudX = 10;
+      public int slotSwapHudY = 100;
+      public boolean equipmentStatsHudEnabled = false;
+      public int equipmentStatsHudX = 10;
+      public int equipmentStatsHudY = 140;
+      public boolean arrowTypeTrackerEnabled = false;
+      public boolean tpMazeTracerEnabled = false;
+      public int arrowTypeTrackerX = 10;
+      public int arrowTypeTrackerY = 180;
+      public boolean minireenasOverlayEnabled = true;
+      public boolean pinglessMiningEnabled = false;
+      public boolean pinglessMiningDebugEnabled = false;
+      public boolean tpsSyncEnabled = true;
+      public int miningTickOverride = 1;
+      public float tpsSyncMinimumTps = 1.0F;
+      public float tpsSyncMaximumTps = 20.0F;
+      public String extraOreSpeed = "";
+      public String extraBlockSpeed = "";
+      @SerializedName(value = "extraGemstoneSpeed", alternate = {"professionalGemstoneSpeed"})
+      public String extraGemstoneSpeed = "";
+      @SerializedName(value = "extraDwarvenMetalSpeed", alternate = {"strongArmDwarvenMetalSpeed"})
+      public String extraDwarvenMetalSpeed = "";
+      public boolean littlefootEspEnabled = false;
+      public boolean littlefootEspTracersEnabled = true;
+      public int littlefootEspColorIndex = 0;
+      public int littlefootEspColor = Settings.colorFromIndex(0);
+      public boolean customEspEnabled = false;
+      public boolean customEspTracersEnabled = true;
+      public int customEspColorIndex = 0;
+      public int customEspColor = Settings.colorFromIndex(0);
+      public String customEspNames = "";
+      public boolean autoFarm2Enabled = false;
+      public boolean autoFarm2ToggleAttackMode = false;
+      public int autoFarm2HoeSlot = 1;
+      public int autoFarm2MousematSlot = 2;
+      public int autoFarm2RodSlot = 3;
+      public int autoFarm2VacuumSlot = 4;
+      public int autoFarm2PestSpawnOffsetSeconds = 0;
+      public String autoFarm2PlotName = "";
+      public String autoFarm2ArmorSlot1 = "";
+      public String autoFarm2ArmorSlot2 = "";
+      public String autoFarm2ArmorSlot3 = "";
+      public List<String> autoFarm2Cycle1 = new ArrayList<>(List.of("START_FARM", "START_MOVEMENT"));
+      public List<String> autoFarm2Cycle2 = new ArrayList<>(List.of("STOP_FARM", "SLOT_SWAP", "INTERACT_MOUSEMAT", "TPTOPLOT", "HOLD_HOE", "START_FARM", "START_MOVEMENT"));
+      public List<String> autoFarm2Cycle3 = new ArrayList<>(List.of("STOP_MOVEMENT", "STOP_FARM", "INTERACT_VACUUM_UNTIL_0_PESTS", "WARP_SPAWN", "HOLD_HOE", "REPEAT"));
+
+   }
+
+   public static int colorFromIndex(int index) {
+      float[][] colors = {
+              {1.0f, 0.4f, 0.7f},
+              {1.0f, 0.25f, 0.25f},
+              {0.25f, 1.0f, 0.25f},
+              {0.25f, 0.55f, 1.0f},
+              {1.0f, 0.9f, 0.2f},
+              {0.2f, 1.0f, 1.0f},
+              {1.0f, 0.6f, 0.1f},
+              {1.0f, 1.0f, 1.0f},
+              {0.65f, 0.25f, 1.0f},
+              {0.0f, 0.0f, 0.0f},
+              {0.55f, 0.55f, 0.55f},
+              {0.6f, 1.0f, 0.1f},
+              {0.0f, 0.15f, 0.8f},
+              {1.0f, 0.0f, 1.0f}
+      };
+      int clamped = clamp(index, 0, colors.length - 1);
+      int r = clamp(Math.round(colors[clamped][0] * 255.0F), 0, 255);
+      int g = clamp(Math.round(colors[clamped][1] * 255.0F), 0, 255);
+      int b = clamp(Math.round(colors[clamped][2] * 255.0F), 0, 255);
+      return (r << 16) | (g << 8) | b;
+   }
+
+   public static float colorRed(int rgb) {
+      return ((rgb >> 16) & 255) / 255.0F;
+   }
+
+   public static float colorGreen(int rgb) {
+      return ((rgb >> 8) & 255) / 255.0F;
+   }
+
+   public static float colorBlue(int rgb) {
+      return (rgb & 255) / 255.0F;
+   }
+
+   private static float clamp(float value, float min, float max) {
+      return Math.max(min, Math.min(max, value));
+   }
+
+   private static int clamp(int value, int min, int max) {
+      return Math.max(min, Math.min(max, value));
+   }
+}

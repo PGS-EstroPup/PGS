@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "pgs_addons",
+  "version": "${version}",
+  "name": "PGS ${version}",
+  "description": "pgs by EstroPup",
+  "authors": [
+    "PGS"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/pgs_addons/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.pgs.pgsaddons.PgsAddonsMod"
+    ]
+  },
+  "mixins": [
+    "pgs_addons.mixins.json"
+  ],
+  "depends": {
+    "minecraft": "${minecraft_dependency}",
+    "fabricloader": ">=0.19.2",
+    "fabric": "${fabric_dependency}",
+    "fabric-language-kotlin": ">=1.13.0+kotlin.2.1.0"
+  }
+}
