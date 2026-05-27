@@ -31,6 +31,6 @@ public class PgsAddonsMod implements ClientModInitializer {
       ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
          Commands.register(dispatcher);
       });
-        System.out.println("[pgs_addons] Initialized client mod (PGS 1.11.3).");
+        System.out.println("[pgs_addons] Initialized client mod (PGS 1.0.0).");
    }
 }

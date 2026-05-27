@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "pgs_addons",
   "version": "${version}",
-  "name": "PGS ${version}",
+  "name": "PGS - ${version}",
   "description": "pgs by EstroPup",
   "authors": [
     "PGS"
