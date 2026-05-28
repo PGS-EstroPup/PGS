@@ -26,6 +26,7 @@ public class PgsAddonsMod implements ClientModInitializer {
       com.pgs.pgsaddons.features.AutoHarp.INSTANCE.init();
       com.pgs.pgsaddons.features.AutoFarm2.INSTANCE.init();
       com.pgs.pgsaddons.features.DrawNodes.INSTANCE.init();
+      com.pgs.pgsaddons.features.NotepadOverlay.INSTANCE.init();
       MinireenasOverlay.init();
       FishMacroCheck.INSTANCE.start();
       ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {

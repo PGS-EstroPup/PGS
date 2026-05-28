@@ -68,11 +68,12 @@ class FishingSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         }
 
         group("Autofish", listOf(
-            option("Main Toggle", autofishButton, "Enables normal autofish. It pauses while a GUI is open."),
+            option("Autofish", autofishButton, "Enables normal autofish. It pauses while a GUI is open."),
             option("Autofish Range", PgsSliderWidget(0, 0, 100, 20, "Range", 1.0, 30.0, Settings.general.autofishRange.toDouble()) {
                 Settings.general.autofishRange = it.toInt()
                 Settings.save()
             }, "Detection range for the bite indicator armor stand."),
+            option("Leap Fish", toggle(Settings.general.autofishJumpBeforeCatch) { Settings.general.autofishJumpBeforeCatch = it }, "Jumps when a bite is detected, then waits 2-4 ticks before reeling in."),
             option("Autofish With Killer", autofishWithKillerButton, "Enables the fishing mode that swaps to a weapon, attacks, then swaps back to rod."),
             option("Killing Slot", PgsSliderWidget(0, 0, 100, 20, "Slot", 1.0, 9.0, Settings.general.killingItemSlot.toDouble()) {
                 Settings.general.killingItemSlot = it.toInt()

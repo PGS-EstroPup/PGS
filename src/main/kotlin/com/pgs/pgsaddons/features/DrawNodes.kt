@@ -123,7 +123,8 @@ object NodeManager {
     var placementActive = false
 
     private val GSON = GsonBuilder().setPrettyPrinting().create()
-    private val SAVE_PATH: Path = Path.of("config", "pgs_nodes.json")
+    private val LEGACY_SAVE_PATH: Path = Path.of("config", "pgs_nodes.json")
+    private val PROFILE_DIR: Path = Path.of("config", "pgs_node_profiles")
     private val LIST_TYPE = object : TypeToken<List<NodeDto>>() {}.type
 
     fun toggle() {
@@ -153,9 +154,17 @@ object NodeManager {
         save()
     }
 
+    fun switchProfile(profileName: String) {
+        save()
+        Settings.general.nodeActiveProfile = normalizeProfileName(profileName)
+        Settings.save()
+        nodes.clear()
+        load()
+    }
+
     fun save() {
         try {
-            Files.createDirectories(SAVE_PATH.parent)
+            Files.createDirectories(PROFILE_DIR)
             val dtos = nodes.map {
                 NodeDto(
                     it.pos.x,
@@ -166,7 +175,7 @@ object NodeManager {
                     it.horizontal.name
                 )
             }
-            Files.writeString(SAVE_PATH, GSON.toJson(dtos))
+            Files.writeString(savePath(), GSON.toJson(dtos))
         } catch (e: Exception) {
             System.err.println("[pgs_addons] Failed to save nodes: $e")
         }
@@ -174,8 +183,24 @@ object NodeManager {
 
     fun load() {
         try {
-            if (!Files.exists(SAVE_PATH)) return
-            val json = Files.readString(SAVE_PATH)
+            Files.createDirectories(PROFILE_DIR)
+            val path = savePath()
+            if (!Files.exists(path)) {
+                if (Settings.general.nodeActiveProfile == "Default" && Files.exists(LEGACY_SAVE_PATH)) {
+                    loadFromPath(LEGACY_SAVE_PATH)
+                    save()
+                }
+                return
+            }
+            loadFromPath(path)
+            println("[pgs_addons] Loaded ${nodes.size} node(s) for node profile ${Settings.general.nodeActiveProfile}.")
+        } catch (e: Exception) {
+            System.err.println("[pgs_addons] Failed to load nodes: $e")
+        }
+    }
+
+    private fun loadFromPath(path: Path) {
+        val json = Files.readString(path)
             val dtos: List<NodeDto> = GSON.fromJson(json, LIST_TYPE) ?: return
             nodes.clear()
             for (dto in dtos) {
@@ -196,10 +221,18 @@ object NodeManager {
                 val storedType = if (type == NodeType.GARDEN) NodeType.GARDEN else NodeType.UNSET
                 nodes.add(PathNode(BlockPos(dto.x, dto.y, dto.z), storedType, vertical, horizontal))
             }
-            println("[pgs_addons] Loaded ${nodes.size} node(s).")
-        } catch (e: Exception) {
-            System.err.println("[pgs_addons] Failed to load nodes: $e")
-        }
+    }
+
+    private fun savePath(): Path {
+        return PROFILE_DIR.resolve("${safeProfileName(Settings.general.nodeActiveProfile)}.json")
+    }
+
+    private fun normalizeProfileName(profileName: String): String {
+        return profileName.trim().ifEmpty { "Default" }
+    }
+
+    private fun safeProfileName(profileName: String): String {
+        return normalizeProfileName(profileName).replace(Regex("[^A-Za-z0-9._-]"), "_")
     }
 }
 

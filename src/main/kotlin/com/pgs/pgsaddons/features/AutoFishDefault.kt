@@ -1,9 +1,11 @@
 package com.pgs.pgsaddons.features
 
 import com.pgs.pgsaddons.Settings
+import com.pgs.pgsaddons.mixin.KeyBindingAccessor as KeyMappingAccessor
 import kotlin.random.Random
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.network.ClientPlayerEntity
+import net.minecraft.client.option.KeyBinding as KeyMapping
 import net.minecraft.entity.decoration.ArmorStandEntity
 import net.minecraft.item.Items
 import net.minecraft.util.Hand
@@ -16,9 +18,12 @@ object AutoFishDefault {
     private var nextActionAtMillis: Long = 0L
     private var aSTriggered: Boolean = false
     private var guiPausedAtMillis: Long? = null
+    private var jumpReleasePending: Boolean = false
 
 
     fun onClientTick(client: MinecraftClient) {
+        releaseJumpIfNeeded(client)
+
         val player = client.player ?: return
         val world = client.world ?: return
 
@@ -43,7 +48,12 @@ object AutoFishDefault {
                 if (found) {
                     aSTriggered = true
                     Stage = 1
-                    nextActionAtMillis = now + TpsSync.serverTicksToMillis((3 + Random.nextInt(4)).toFloat())
+                    if (Settings.general.autofishJumpBeforeCatch) {
+                        jump(client)
+                        nextActionAtMillis = now + TpsSync.serverTicksToMillis((2 + Random.nextInt(3)).toFloat())
+                    } else {
+                        nextActionAtMillis = now + TpsSync.serverTicksToMillis((3 + Random.nextInt(4)).toFloat())
+                    }
                 }
             }
             if (Stage == 1 && now >= nextActionAtMillis) {
@@ -79,5 +89,21 @@ object AutoFishDefault {
             client.interactionManager?.interactItem(player, Hand.MAIN_HAND)
             player.swingHand(Hand.MAIN_HAND, true)
         } catch (e: Exception) {}
+    }
+
+    private fun jump(client: MinecraftClient) {
+        try {
+            KeyMapping.setKeyPressed((client.options.jumpKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), true)
+            jumpReleasePending = true
+        } catch (e: Exception) {}
+    }
+
+    private fun releaseJumpIfNeeded(client: MinecraftClient) {
+        if (!jumpReleasePending) return
+
+        try {
+            KeyMapping.setKeyPressed((client.options.jumpKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), false)
+        } catch (e: Exception) {}
+        jumpReleasePending = false
     }
 }

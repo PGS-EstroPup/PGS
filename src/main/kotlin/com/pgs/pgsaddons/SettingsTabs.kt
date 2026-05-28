@@ -10,17 +10,19 @@ enum class SettingsTab {
     COMBAT,
     NODES,
     MINING,
+    NOTEPAD,
     DEBUG
 }
 
 object SettingsTabs {
     private val tabs = listOf(
-        SettingsTab.GENERAL to "§lGeneral",
-        SettingsTab.FISHING to "§lFishing",
-        SettingsTab.COMBAT to "§lCombat",
-        SettingsTab.NODES to "§lFarming",
-        SettingsTab.MINING to "§lMining",
-        SettingsTab.DEBUG to "§lDebug"
+        SettingsTab.GENERAL to "\u00A7lGeneral",
+        SettingsTab.FISHING to "\u00A7lFishing",
+        SettingsTab.COMBAT to "\u00A7lCombat",
+        SettingsTab.NODES to "\u00A7lFarming",
+        SettingsTab.MINING to "\u00A7lMining",
+        SettingsTab.NOTEPAD to "\u00A7lNotes",
+        SettingsTab.DEBUG to "\u00A7lDebug"
     )
 
     fun create(
@@ -64,6 +66,7 @@ object SettingsTabs {
             SettingsTab.COMBAT -> CombatSettingsScreen(parent)
             SettingsTab.NODES -> NodesSettingsScreen(parent)
             SettingsTab.MINING -> MiningSettingsScreen(parent)
+            SettingsTab.NOTEPAD -> NotepadScreen(parent)
             SettingsTab.DEBUG -> DebugSettingsScreen(parent)
         }
     }

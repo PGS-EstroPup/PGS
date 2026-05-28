@@ -5,7 +5,7 @@
     "compatibilityLevel": "JAVA_21",
     "refmap": "pgs_addons-refmap.json",
     "mixins": [],
-  "client": ["EntityRendererMixin", "PlayerEntityRendererMixin", "PlayerInventoryMixin", "HandledScreenAccessor", "InputAccessor", "KeyBindingAccessor", "KeyboardInputMixin", "ClientPlayNetworkHandlerMixin"],
+  "client": ["EntityRendererMixin", "PlayerEntityRendererMixin", "PlayerInventoryMixin", "HandledScreenAccessor", "InputAccessor", "KeyBindingAccessor", "KeyboardInputMixin", "ClientPlayNetworkHandlerMixin", "ScreenMixin", "ParentElementMixin"],
     "injectors": {
         "defaultRequire": 1
     }

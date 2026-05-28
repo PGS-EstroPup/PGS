@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Settings {
    private static final Gson GSON = (new GsonBuilder()).setPrettyPrinting().create();
@@ -17,6 +19,7 @@ public class Settings {
    public static void save() {
       try {
          Files.createDirectories(CONFIG_PATH.getParent());
+         saveCurrentAutoFarm2Profile();
          String json = GSON.toJson(general);
          Files.writeString(CONFIG_PATH, json);
       } catch (IOException var1) {
@@ -32,6 +35,7 @@ public class Settings {
             if (loaded != null) {
                general.autofish = loaded.autofish;
                general.autofishRange = loaded.autofishRange;
+               general.autofishJumpBeforeCatch = loaded.autofishJumpBeforeCatch;
                general.iHateDioriteEnabled = loaded.iHateDioriteEnabled;
                general.pestEspEnabled = json.contains("\"pestEspEnabled\"") ? loaded.pestEspEnabled : true;
                general.mobEspColorIndex = clamp(loaded.mobEspColorIndex, 0, 7);
@@ -76,6 +80,14 @@ public class Settings {
                if (loaded.macroCheckAlertText != null) {
                   general.macroCheckAlertText = loaded.macroCheckAlertText;
                }
+               if (loaded.notepadText != null) {
+                  general.notepadText = loaded.notepadText;
+               }
+               general.notepadRenderMode = json.contains("\"notepadRenderMode\"") ? clamp(loaded.notepadRenderMode, 0, 2) : general.notepadRenderMode;
+               general.notepadX = json.contains("\"notepadX\"") ? loaded.notepadX : general.notepadX;
+               general.notepadY = json.contains("\"notepadY\"") ? loaded.notepadY : general.notepadY;
+               general.notepadWidth = json.contains("\"notepadWidth\"") ? loaded.notepadWidth : general.notepadWidth;
+               general.notepadHeight = json.contains("\"notepadHeight\"") ? loaded.notepadHeight : general.notepadHeight;
                general.nodeRenderMode = clamp(loaded.nodeRenderMode, 0, 2);
                general.zeroTickHardstoneEnabled = loaded.zeroTickHardstoneEnabled;
                general.ChestHighlightEnabled = loaded.ChestHighlightEnabled;
@@ -161,6 +173,17 @@ public class Settings {
                if (loaded.autoFarm2Cycle3 != null) {
                   general.autoFarm2Cycle3 = loaded.autoFarm2Cycle3;
                }
+               if (loaded.autoFarm2Profiles != null) {
+                  general.autoFarm2Profiles = loaded.autoFarm2Profiles;
+               }
+               if (loaded.autoFarm2ActiveProfile != null) {
+                  general.autoFarm2ActiveProfile = loaded.autoFarm2ActiveProfile;
+               }
+               if (loaded.nodeActiveProfile != null) {
+                  general.nodeActiveProfile = loaded.nodeActiveProfile;
+               }
+               ensureAutoFarm2Profile();
+               applyAutoFarm2Profile(general.autoFarm2ActiveProfile);
             }
          } else {
             save();
@@ -173,6 +196,7 @@ public class Settings {
    public static class Config {
       public boolean autofish = true;
       public int autofishRange = 30;
+      public boolean autofishJumpBeforeCatch = false;
       public boolean iHateDioriteEnabled = true;
       public boolean pestEspEnabled = true;
       public int mobEspColorIndex = 0;
@@ -212,6 +236,12 @@ public class Settings {
       public int killingSwingCount = 1; // 1-5
       public boolean macroCheckEnabled = false;
       public String macroCheckAlertText = "MACRO CHECK!";
+      public int notepadRenderMode = 0;
+      public String notepadText = "";
+      public int notepadX = 20;
+      public int notepadY = 20;
+      public int notepadWidth = 180;
+      public int notepadHeight = 120;
       public int nodeRenderMode = 0;
       public boolean zeroTickHardstoneEnabled = false;
       public boolean ChestHighlightEnabled = true;
@@ -264,6 +294,9 @@ public class Settings {
       public int autoFarm2RodSlot = 3;
       public int autoFarm2VacuumSlot = 4;
       public int autoFarm2PestSpawnOffsetSeconds = 0;
+      public String autoFarm2ActiveProfile = "Default";
+      public String nodeActiveProfile = "Default";
+      public Map<String, AutoFarm2Profile> autoFarm2Profiles = new LinkedHashMap<>();
       public String autoFarm2PlotName = "";
       public String autoFarm2ArmorSlot1 = "";
       public String autoFarm2ArmorSlot2 = "";
@@ -272,6 +305,83 @@ public class Settings {
       public List<String> autoFarm2Cycle2 = new ArrayList<>(List.of("STOP_FARM", "SLOT_SWAP", "INTERACT_MOUSEMAT", "TPTOPLOT", "HOLD_HOE", "START_FARM", "START_MOVEMENT"));
       public List<String> autoFarm2Cycle3 = new ArrayList<>(List.of("STOP_MOVEMENT", "STOP_FARM", "INTERACT_VACUUM_UNTIL_0_PESTS", "WARP_SPAWN", "HOLD_HOE", "REPEAT"));
 
+   }
+
+   public static class AutoFarm2Profile {
+      public boolean toggleAttackMode = false;
+      public int hoeSlot = 1;
+      public int mousematSlot = 2;
+      public int rodSlot = 3;
+      public int vacuumSlot = 4;
+      public int pestSpawnOffsetSeconds = 0;
+      public String plotName = "";
+      public String armorSlot1 = "";
+      public String armorSlot2 = "";
+      public String armorSlot3 = "";
+      public List<String> cycle1 = new ArrayList<>(List.of("START_FARM", "START_MOVEMENT"));
+      public List<String> cycle2 = new ArrayList<>(List.of("STOP_FARM", "SLOT_SWAP", "INTERACT_MOUSEMAT", "TPTOPLOT", "HOLD_HOE", "START_FARM", "START_MOVEMENT"));
+      public List<String> cycle3 = new ArrayList<>(List.of("STOP_MOVEMENT", "STOP_FARM", "INTERACT_VACUUM_UNTIL_0_PESTS", "WARP_SPAWN", "HOLD_HOE", "REPEAT"));
+   }
+
+   public static void switchAutoFarm2Profile(String profileName) {
+      saveCurrentAutoFarm2Profile();
+      general.autoFarm2ActiveProfile = normalizeProfileName(profileName);
+      ensureAutoFarm2Profile();
+      applyAutoFarm2Profile(general.autoFarm2ActiveProfile);
+      save();
+   }
+
+   public static void saveCurrentAutoFarm2Profile() {
+      general.autoFarm2Profiles.put(normalizeProfileName(general.autoFarm2ActiveProfile), snapshotAutoFarm2Profile());
+   }
+
+   private static void ensureAutoFarm2Profile() {
+      String profileName = normalizeProfileName(general.autoFarm2ActiveProfile);
+      general.autoFarm2ActiveProfile = profileName;
+      if (!general.autoFarm2Profiles.containsKey(profileName)) {
+         general.autoFarm2Profiles.put(profileName, snapshotAutoFarm2Profile());
+      }
+   }
+
+   private static AutoFarm2Profile snapshotAutoFarm2Profile() {
+      AutoFarm2Profile profile = new AutoFarm2Profile();
+      profile.toggleAttackMode = general.autoFarm2ToggleAttackMode;
+      profile.hoeSlot = general.autoFarm2HoeSlot;
+      profile.mousematSlot = general.autoFarm2MousematSlot;
+      profile.rodSlot = general.autoFarm2RodSlot;
+      profile.vacuumSlot = general.autoFarm2VacuumSlot;
+      profile.pestSpawnOffsetSeconds = general.autoFarm2PestSpawnOffsetSeconds;
+      profile.plotName = general.autoFarm2PlotName;
+      profile.armorSlot1 = general.autoFarm2ArmorSlot1;
+      profile.armorSlot2 = general.autoFarm2ArmorSlot2;
+      profile.armorSlot3 = general.autoFarm2ArmorSlot3;
+      profile.cycle1 = new ArrayList<>(general.autoFarm2Cycle1);
+      profile.cycle2 = new ArrayList<>(general.autoFarm2Cycle2);
+      profile.cycle3 = new ArrayList<>(general.autoFarm2Cycle3);
+      return profile;
+   }
+
+   private static void applyAutoFarm2Profile(String profileName) {
+      AutoFarm2Profile profile = general.autoFarm2Profiles.get(normalizeProfileName(profileName));
+      if (profile == null) return;
+      general.autoFarm2ToggleAttackMode = profile.toggleAttackMode;
+      general.autoFarm2HoeSlot = clamp(profile.hoeSlot, 1, 9);
+      general.autoFarm2MousematSlot = clamp(profile.mousematSlot, 1, 9);
+      general.autoFarm2RodSlot = clamp(profile.rodSlot, 1, 9);
+      general.autoFarm2VacuumSlot = clamp(profile.vacuumSlot, 1, 9);
+      general.autoFarm2PestSpawnOffsetSeconds = Math.max(0, profile.pestSpawnOffsetSeconds);
+      general.autoFarm2PlotName = profile.plotName != null ? profile.plotName : "";
+      general.autoFarm2ArmorSlot1 = profile.armorSlot1 != null ? profile.armorSlot1 : "";
+      general.autoFarm2ArmorSlot2 = profile.armorSlot2 != null ? profile.armorSlot2 : "";
+      general.autoFarm2ArmorSlot3 = profile.armorSlot3 != null ? profile.armorSlot3 : "";
+      general.autoFarm2Cycle1 = profile.cycle1 != null ? new ArrayList<>(profile.cycle1) : new ArrayList<>(List.of("START_FARM", "START_MOVEMENT"));
+      general.autoFarm2Cycle2 = profile.cycle2 != null ? new ArrayList<>(profile.cycle2) : new ArrayList<>(List.of("STOP_FARM", "SLOT_SWAP", "INTERACT_MOUSEMAT", "TPTOPLOT", "HOLD_HOE", "START_FARM", "START_MOVEMENT"));
+      general.autoFarm2Cycle3 = profile.cycle3 != null ? new ArrayList<>(profile.cycle3) : new ArrayList<>(List.of("STOP_MOVEMENT", "STOP_FARM", "INTERACT_VACUUM_UNTIL_0_PESTS", "WARP_SPAWN", "HOLD_HOE", "REPEAT"));
+   }
+
+   private static String normalizeProfileName(String profileName) {
+      if (profileName == null || profileName.isBlank()) return "Default";
+      return profileName.trim();
    }
 
    public static int colorFromIndex(int index) {

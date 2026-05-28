@@ -1,6 +1,7 @@
 package com.pgs.pgsaddons
 
 import com.pgs.pgsaddons.features.DrawNodes
+import com.pgs.pgsaddons.features.NodeManager
 import com.pgs.pgsaddons.features.AutoFarm2
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import com.pgs.pgsaddons.utils.PgsSliderWidget
@@ -77,6 +78,15 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             }
         }
 
+        fun profileButton(current: () -> String, onSelect: (String) -> Unit): PgsButtonWidget {
+            return PgsButtonWidget(0, 0, 100, 20, Text.literal(current())) { button ->
+                val next = nextProfile(current())
+                onSelect(next)
+                button.setMessage(Text.literal(next))
+                client?.setScreen(NodesSettingsScreen(parent))
+            }
+        }
+
         fun keybindOption(name: String, binding: KeyBinding, description: String? = null): SettingsOptionRow {
             lateinit var row: KeybindRow
             val button = PgsButtonWidget(0, 0, 120, 20, binding.getBoundKeyLocalizedText()) {
@@ -89,6 +99,7 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         }
 
         group("Node Placement", listOf(
+            option("Node Profile", profileButton({ Settings.general.nodeActiveProfile }) { NodeManager.switchProfile(it) }, "Switches the placed-node preset."),
             keybindOption("Toggle Node Placement", DrawNodes.toggleKey, "Right click to place, Right click again to configure"),
             option("Node Render", nodeRenderModeButton(), "Controls whether placed nodes render always, only within 30 blocks, or never.")
         ))
@@ -118,6 +129,7 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         }
         pestOffsetInput.setPlaceholder(Text.literal("2m 45s"))
         group("Auto Farm 2.0", listOf(
+            option("AutoFarm Profile", profileButton({ Settings.general.autoFarm2ActiveProfile }) { Settings.switchAutoFarm2Profile(it) }, "Switches Auto Farm slots, plot, wardrobe slots, pest offset, and action order."),
             option("Main Toggle", toggle(Settings.general.autoFarm2Enabled) {
                 if (it != Settings.general.autoFarm2Enabled) AutoFarm2.toggle()
             }, "Starts or pauses Auto Farm 2.0. Restarting continues from the last unfinished action unless Stop Action reset it."),
@@ -165,6 +177,11 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     }
 
     private fun onOff(value: Boolean): String = if (value) "§aON" else "§cOFF"
+
+    private fun nextProfile(current: String): String {
+        val index = PROFILE_NAMES.indexOf(current).takeIf { it >= 0 } ?: 0
+        return PROFILE_NAMES[(index + 1) % PROFILE_NAMES.size]
+    }
 
     override fun renderBackground(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         context.fill(0, 0, width, height, 0x88000000.toInt())
@@ -238,5 +255,9 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             minutes > 0 -> "${minutes}m"
             else -> "${seconds}s"
         }
+    }
+
+    companion object {
+        private val PROFILE_NAMES = listOf("Default", "Profile 2", "Profile 3", "Profile 4", "Profile 5")
     }
 }

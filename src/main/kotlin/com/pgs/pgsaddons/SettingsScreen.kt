@@ -76,10 +76,16 @@ class SettingsScreen : Screen(Text.empty()) {
             Settings.general.menuColor = color
             Settings.save()
         }
+        val notepadRenderModeButton = PgsButtonWidget(0, 0, 100, 20, Text.literal(notepadRenderModeLabel(Settings.general.notepadRenderMode))) { button ->
+            Settings.general.notepadRenderMode = (Settings.general.notepadRenderMode + 1) % 3
+            Settings.save()
+            button.setMessage(Text.literal(notepadRenderModeLabel(Settings.general.notepadRenderMode)))
+        }
         group("General", listOf(
             option("Show Own Nametag", toggle(Settings.general.showOwnNametag) { Settings.general.showOwnNametag = it }),
             option("Deployables Tracker", toggle(Settings.general.deployablesTrackerEnabled) { Settings.general.deployablesTrackerEnabled = it }),
             option("Keep this on <3", toggle(Settings.general.minireenasOverlayEnabled) { Settings.general.minireenasOverlayEnabled = it }),
+            option("Notepad", notepadRenderModeButton, "Controls where the notepad HUD window is rendered."),
             option("Menu Color", menuColor),
             keybindOption("Attack / Destroy", client!!.options.attackKey, "Changes Minecraft's Controls > Attack/Destroy binding.")
         ))
@@ -158,6 +164,14 @@ class SettingsScreen : Screen(Text.empty()) {
     }
 
     private fun onOff(value: Boolean): String = if (value) "§aON" else "§cOFF"
+
+    private fun notepadRenderModeLabel(value: Int): String {
+        return when (value.coerceIn(0, 2)) {
+            1 -> "\u00A7aWorld"
+            2 -> "\u00A7aEverywhere"
+            else -> "\u00A7cOFF"
+        }
+    }
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         ThreePaneSettingsLayout.hide(groups)
