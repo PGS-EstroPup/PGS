@@ -107,10 +107,10 @@ object FarmingTracker {
 
     private fun triggerCycle2IfNeeded(now: Long) {
         if (cycle2TriggeredForThisCooldown) return
+        if (!AutoFarm2.startCycle2FromPestCooldown()) return
         cycle2TriggeredForThisCooldown = true
         alertUntilMillis = now + 4000L
         chimeTicksRemaining = 5
-        AutoFarm2.startCycle2FromPestCooldown()
     }
 
     fun isCycle2Ready(): Boolean {

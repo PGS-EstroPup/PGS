@@ -156,8 +156,8 @@ object AutoFarm2 {
         resetProgress()
     }
 
-    fun startCycle2FromPestCooldown() {
-        if (!enabled || cycle != Cycle.C1) return
+    fun startCycle2FromPestCooldown(): Boolean {
+        if (!enabled || cycle != Cycle.C1) return false
         waitingForSlotSwap = false
         vacuumActive = false
         timedVacuumActive = false
@@ -169,6 +169,7 @@ object AutoFarm2 {
         cooldownReady = true
         clearCycleProgress(Cycle.C2)
         startCycle(Cycle.C2)
+        return true
     }
 
     fun updatePestAliveCount(alive: Int) {
@@ -300,7 +301,7 @@ object AutoFarm2 {
             }
             AutoFarmAction.REPEAT -> {
                 cooldownReady = false
-                resetProgress()
+                completedActions.clear()
                 startCycle(Cycle.C1)
             }
             AutoFarmAction.START_MOVEMENT -> {
