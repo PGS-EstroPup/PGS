@@ -35,10 +35,13 @@ object SlotSwap {
     private var skipSwapIfSqueakyEquipment = false
     private val swapBeforeStacks = mutableMapOf<Int, ItemStack>()
     private var swapRetryCount = 0
+    private var isSwapVerifying = false
 
     private const val INITIAL_SWAP_DELAY_TICKS = 2
     private const val BETWEEN_SWAP_DELAY_TICKS = 6
-    private const val MAX_SWAP_RETRIES = 2
+    private const val VERIFY_SWAP_DELAY_TICKS = 14
+    private const val RETRY_SWAP_DELAY_TICKS = 8
+    private const val MAX_SWAP_RETRIES = 5
 
     fun triggerSwap(onComplete: (() -> Unit)? = null, skipIfSqueakyEquipment: Boolean = false) {
         if (!Settings.general.slotSwapEnabled) {
@@ -201,6 +204,7 @@ object SlotSwap {
         swapDelayTicks = INITIAL_SWAP_DELAY_TICKS.toFloat()
         swapBeforeStacks.clear()
         swapRetryCount = 0
+        isSwapVerifying = false
         isSwapRunning = true
     }
 
@@ -219,6 +223,12 @@ object SlotSwap {
         }
 
         if (swapSlotIndex >= swapSlots.size) {
+            if (!isSwapVerifying) {
+                isSwapVerifying = true
+                swapDelayTicks = VERIFY_SWAP_DELAY_TICKS.toFloat()
+                return
+            }
+            isSwapVerifying = false
             if (retryUnchangedSlots(screen)) return
             finishTickSwap(client)
             return
@@ -249,9 +259,10 @@ object SlotSwap {
 
         swapSlots = unchanged
         swapSlotIndex = 0
-        swapDelayTicks = BETWEEN_SWAP_DELAY_TICKS.toFloat()
+        swapDelayTicks = RETRY_SWAP_DELAY_TICKS.toFloat()
         swapBeforeStacks.clear()
         swapRetryCount++
+        isSwapVerifying = false
         return true
     }
 
@@ -270,6 +281,7 @@ object SlotSwap {
         skipSwapIfSqueakyEquipment = false
         swapBeforeStacks.clear()
         swapRetryCount = 0
+        isSwapVerifying = false
         if (clearCallback) swapCallback = null
     }
 
