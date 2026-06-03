@@ -683,8 +683,8 @@ object AutoFarm2 {
         if (lastAppliedActionNodePos == node.pos) return
 
         when (node.type) {
-            NodeType.GARDEN -> {
-                val plot = Settings.general.nodeTpPlotName.trim()
+            NodeType.TP_TO_PLOT -> {
+                val plot = node.plotName.trim().ifEmpty { Settings.general.nodeTpPlotName.trim() }
                 if (plot.isNotEmpty()) {
                     mc.player?.connection?.sendChatCommand("tptoplot $plot")
                     waitTicks = max(waitTicks, 40f)
@@ -853,6 +853,4 @@ object AutoFarm2 {
         mc.player?.sendSystemMessage(Text.literal("§b[AutoFarm 2.0] §7$text"))
     }
 }
-
-
 

@@ -16,6 +16,7 @@ import net.minecraft.client.gui.DrawContext
 import net.minecraft.client.gui.drawCenteredTextWithShadow
 import net.minecraft.client.gui.Click
 import net.minecraft.client.gui.screen.Screen
+import net.minecraft.client.gui.widget.TextFieldWidget
 import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.util.InputUtil
@@ -43,7 +44,8 @@ enum class NodeType(
     BACKWARD("Backward", 1.0f, 0.7f, 0.2f), // orange
     LEFT   ("Left",    1.0f, 0.2f, 0.2f),  // red
     RIGHT  ("Right",   0.2f, 0.4f, 1.0f),  // blue
-    GARDEN ("TP To Plot",  0.2f, 1.0f, 0.3f),  // green
+    GARDEN ("Garden",  0.2f, 1.0f, 0.3f),  // green
+    TP_TO_PLOT("TP To Plot", 0.9f, 0.8f, 0.2f), // yellow
 }
 
 enum class NodeVerticalDirection(val label: String) {
@@ -67,15 +69,16 @@ data class PathNode(
     val pos: BlockPos,
     var type: NodeType = NodeType.UNSET,
     var vertical: NodeVerticalDirection = NodeVerticalDirection.NONE,
-    var horizontal: NodeHorizontalDirection = NodeHorizontalDirection.NONE
+    var horizontal: NodeHorizontalDirection = NodeHorizontalDirection.NONE,
+    var plotName: String = ""
 ) {
     val isMovementNode: Boolean
         get() = vertical != NodeVerticalDirection.NONE || horizontal != NodeHorizontalDirection.NONE
     val isActionNode: Boolean
-        get() = type == NodeType.GARDEN
+        get() = type == NodeType.TP_TO_PLOT
 
     fun displayLabel(): String {
-        if (type == NodeType.GARDEN) return NodeType.GARDEN.label
+        if (type == NodeType.GARDEN || type == NodeType.TP_TO_PLOT) return type.label
         if (!isMovementNode) return NodeType.UNSET.label
         return listOfNotNull(
             horizontal.takeIf { it != NodeHorizontalDirection.NONE }?.label,
@@ -84,7 +87,7 @@ data class PathNode(
     }
 
     fun renderColor(): FloatArray {
-        if (type == NodeType.GARDEN) return floatArrayOf(type.r, type.g, type.b)
+        if (type == NodeType.GARDEN || type == NodeType.TP_TO_PLOT) return floatArrayOf(type.r, type.g, type.b)
         if (!isMovementNode) return floatArrayOf(NodeType.UNSET.r, NodeType.UNSET.g, NodeType.UNSET.b)
 
         val colors = mutableListOf<FloatArray>()
@@ -114,7 +117,8 @@ private data class NodeDto(
     val z: Int,
     val type: String? = null,
     val vertical: String? = null,
-    val horizontal: String? = null
+    val horizontal: String? = null,
+    val plotName: String? = null
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -213,7 +217,8 @@ object NodeManager {
                     it.pos.z,
                     it.type.name,
                     it.vertical.name,
-                    it.horizontal.name
+                    it.horizontal.name,
+                    it.plotName
                 )
             }
             Files.writeString(savePath(), GSON.toJson(dtos))
@@ -259,8 +264,11 @@ object NodeManager {
                     }
                 }
 
-                val storedType = if (type == NodeType.GARDEN) NodeType.GARDEN else NodeType.UNSET
-                nodes.add(PathNode(BlockPos(dto.x, dto.y, dto.z), storedType, vertical, horizontal))
+                val storedType = when (type) {
+                    NodeType.GARDEN, NodeType.TP_TO_PLOT -> type
+                    else -> NodeType.UNSET
+                }
+                nodes.add(PathNode(BlockPos(dto.x, dto.y, dto.z), storedType, vertical, horizontal, dto.plotName ?: ""))
             }
     }
 
@@ -409,7 +417,7 @@ object DrawNodes {
 class NodeMenuScreen(private val node: PathNode) : Screen(Text.literal("Node Options")) {
 
     private val panelW = 260
-    private val panelH = 430
+    private val panelH = 460
     private val btnW   = 200
     private val btnH   = 24
     private val btnGap = 8
@@ -459,13 +467,33 @@ class NodeMenuScreen(private val node: PathNode) : Screen(Text.literal("Node Opt
             }
         )
         currentY += btnH + btnGap
+
+        val plotInput = TextFieldWidget(textRenderer, contentStartX, currentY, btnW, btnH, Text.literal("Plot Name"))
+        plotInput.text = node.plotName
+        plotInput.setPlaceholder(Text.literal("Plot name"))
+        plotInput.setChangedListener {
+            node.plotName = it
+            NodeManager.save()
+        }
+        addDrawableChild(plotInput)
+        currentY += btnH + btnGap
+
+        addDrawableChild(
+            PgsButtonWidget(contentStartX, currentY, btnW, btnH, Text.literal(NodeType.TP_TO_PLOT.label)) {
+                node.type = NodeType.TP_TO_PLOT
+                node.vertical = NodeVerticalDirection.NONE
+                node.horizontal = NodeHorizontalDirection.NONE
+                NodeManager.save()
+            }
+        )
+        currentY += btnH + btnGap + 4
+
         addDrawableChild(
             PgsButtonWidget(contentStartX, currentY, btnW, btnH, Text.literal(NodeType.GARDEN.label)) {
                 node.type = NodeType.GARDEN
                 node.vertical = NodeVerticalDirection.NONE
                 node.horizontal = NodeHorizontalDirection.NONE
                 NodeManager.save()
-                close()
             }
         )
         currentY += btnH + btnGap + 4
