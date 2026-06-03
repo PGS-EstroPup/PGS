@@ -97,8 +97,9 @@ object AutoFarm2 {
     private var cooldownReady = false
     private val completedActions = mutableMapOf<Cycle, Int>()
 
-    private const val MIN_NODE_TICK_OFFSET = 6
-    private const val MAX_NODE_TICK_OFFSET = 12
+    private const val MIN_NODE_TICK_OFFSET = 3
+    private const val MAX_NODE_TICK_OFFSET = 6
+    private const val DIAGONAL_MOVEMENT_SCALE = 0.70710677f
 
     fun init() {
         enabled = Settings.general.autoFarm2Enabled
@@ -225,7 +226,8 @@ object AutoFarm2 {
             backward && !forward -> -1f
             else -> 0f
         }
-        (input as InputAccessor).`pgsAddons$setMovementVector`(Vec2f(movementX, movementY))
+        val diagonalScale = if (movementX != 0f && movementY != 0f) DIAGONAL_MOVEMENT_SCALE else 1f
+        (input as InputAccessor).`pgsAddons$setMovementVector`(Vec2f(movementX * diagonalScale, movementY * diagonalScale))
         (input as InputAccessor).`pgsAddons$setPlayerInput`(PlayerInput(forward, backward, left, right, false, false, false))
     }
 
@@ -853,4 +855,3 @@ object AutoFarm2 {
         mc.player?.sendSystemMessage(Text.literal("§b[AutoFarm 2.0] §7$text"))
     }
 }
-
