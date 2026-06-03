@@ -5,8 +5,7 @@ import net.minecraft.client.gui.DrawContext
 import net.minecraft.client.gui.screen.Screen
 import net.minecraft.client.gui.widget.ClickableWidget
 import net.minecraft.text.Text
-import java.awt.Desktop
-import java.net.URI
+import net.minecraft.util.Util
 
 class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     private var scrollY = 0.0
@@ -64,9 +63,6 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             option("Arrow Tracker HUD", toggle(Settings.general.arrowTypeTrackerEnabled) { Settings.general.arrowTypeTrackerEnabled = it }),
             option("TP Maze Tracer", toggle(Settings.general.tpMazeTracerEnabled) { Settings.general.tpMazeTracerEnabled = it })
         ))
-        group("Auto Dungeons", listOf(
-            option("Auto Dungeons", autoDungeonsEditButton)
-        ))
         group("Starred Mobs ESP", listOf(
             option("Main Toggle", toggle(Settings.general.starredMobEspEnabled) { Settings.general.starredMobEspEnabled = it }),
             option("Tracer", toggle(Settings.general.starredMobEspTracersEnabled) { Settings.general.starredMobEspTracersEnabled = it }),
@@ -82,8 +78,11 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             option("Main Toggle", toggle(Settings.general.keyHighlightEnabled) { Settings.general.keyHighlightEnabled = it }),
             option("Tracer", toggle(Settings.general.keyHighlightTracersEnabled) { Settings.general.keyHighlightTracersEnabled = it })
         ))
+        group("Auto Dungeons", listOf(
+            option("Auto Dungeons", autoDungeonsEditButton)
+        ))
 
-        addDrawableChild(PgsButtonWidget(width / 2 - 185, startY + panelHeight - 24, 175, 18, Text.literal("Â§bMove HUD")) {
+        addDrawableChild(PgsButtonWidget(width / 2 - 185, startY + panelHeight - 24, 175, 18, Text.literal("\u00A7bMove HUD")) {
             client?.setScreen(HudEditorScreen(this))
         })
         addDrawableChild(PgsButtonWidget(width / 2 + 10, startY + panelHeight - 24, 175, 18, Text.literal("Done")) { client?.setScreen(null) })
@@ -93,7 +92,7 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         context.fill(0, 0, width, height, 0x88000000.toInt())
     }
 
-    private fun onOff(value: Boolean): String = if (value) "Â§aON" else "Â§cOFF"
+    private fun onOff(value: Boolean): String = if (value) "\u00A7aON" else "\u00A7cOFF"
 
     private fun openAutoDungeonsLink() {
         val rawUrl = AUTO_DUNGEONS_EDIT_URL.trim()
@@ -109,7 +108,7 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         }
 
         try {
-            Desktop.getDesktop().browse(URI.create(url))
+            Util.getPlatform().openUri(url)
         } catch (_: Exception) {
             client?.player?.sendSystemMessage(Text.literal("\u00A7c[PGS] Could not open Auto Dungeons link."))
         }
