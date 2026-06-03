@@ -88,6 +88,7 @@ object AutoFarm2 {
     private var lastMovementVertical = NodeVerticalDirection.NONE
     private var lastMovementHorizontal = NodeHorizontalDirection.NONE
     private var lastAppliedMovementNodePos: BlockPos? = null
+    private var lastAppliedActionNodePos: BlockPos? = null
     private var pendingMovementNodePos: BlockPos? = null
     private var pendingMovementVertical = NodeVerticalDirection.NONE
     private var pendingMovementHorizontal = NodeHorizontalDirection.NONE
@@ -624,7 +625,9 @@ object AutoFarm2 {
 
     private fun updateLastNodeDirection() {
         val player = mc.player ?: return
-        val node = currentMovementNode() ?: return
+        val currentNode = currentPathNode()
+        handleActionNode(currentNode)
+        val node = currentNode?.takeIf { it.isMovementNode } ?: return
         val offset = randomNodeTickOffset()
 
         if (lastAppliedMovementNodePos != node.pos) {
@@ -649,10 +652,10 @@ object AutoFarm2 {
         }
     }
 
-    private fun currentMovementNode(): PathNode? {
+    private fun currentPathNode(): PathNode? {
         val player = mc.player ?: return null
         val exact = (NodeManager.nodeAt(player.blockPos.down()) ?: NodeManager.nodeAt(player.blockPos))
-            ?.takeIf { it.isMovementNode }
+            ?.takeIf { it.isMovementNode || it.isActionNode }
         if (exact != null) return exact
 
         val px = player.x
@@ -660,7 +663,7 @@ object AutoFarm2 {
         val pz = player.z
         return NodeManager.nodes
             .asSequence()
-            .filter { it.isMovementNode }
+            .filter { it.isMovementNode || it.isActionNode }
             .filter { it.pos.y == py || it.pos.y == py - 1 }
             .map { node ->
                 val dx = node.pos.x + 0.5 - px
@@ -670,6 +673,27 @@ object AutoFarm2 {
             .filter { it.second <= 0.9 * 0.9 }
             .minByOrNull { it.second }
             ?.first
+    }
+
+    private fun handleActionNode(node: PathNode?) {
+        if (node == null || !node.isActionNode) {
+            lastAppliedActionNodePos = null
+            return
+        }
+        if (lastAppliedActionNodePos == node.pos) return
+
+        when (node.type) {
+            NodeType.GARDEN -> {
+                val plot = Settings.general.nodeTpPlotName.trim()
+                if (plot.isNotEmpty()) {
+                    mc.player?.connection?.sendChatCommand("tptoplot $plot")
+                    waitTicks = max(waitTicks, 40f)
+                    lastAppliedMovementNodePos = null
+                    lastAppliedActionNodePos = node.pos
+                }
+            }
+            else -> {}
+        }
     }
 
     private fun applyMovementNode(pos: BlockPos, vertical: NodeVerticalDirection, horizontal: NodeHorizontalDirection) {
@@ -684,6 +708,7 @@ object AutoFarm2 {
 
     private fun resetNodeDelay() {
         lastAppliedMovementNodePos = null
+        lastAppliedActionNodePos = null
         pendingMovementNodePos = null
         pendingMovementVertical = NodeVerticalDirection.NONE
         pendingMovementHorizontal = NodeHorizontalDirection.NONE
@@ -828,7 +853,6 @@ object AutoFarm2 {
         mc.player?.sendSystemMessage(Text.literal("§b[AutoFarm 2.0] §7$text"))
     }
 }
-
 
 
 

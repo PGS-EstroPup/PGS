@@ -43,7 +43,7 @@ enum class NodeType(
     BACKWARD("Backward", 1.0f, 0.7f, 0.2f), // orange
     LEFT   ("Left",    1.0f, 0.2f, 0.2f),  // red
     RIGHT  ("Right",   0.2f, 0.4f, 1.0f),  // blue
-    GARDEN ("Garden",  0.2f, 1.0f, 0.3f),  // green
+    GARDEN ("TP To Plot",  0.2f, 1.0f, 0.3f),  // green
 }
 
 enum class NodeVerticalDirection(val label: String) {
@@ -71,6 +71,8 @@ data class PathNode(
 ) {
     val isMovementNode: Boolean
         get() = vertical != NodeVerticalDirection.NONE || horizontal != NodeHorizontalDirection.NONE
+    val isActionNode: Boolean
+        get() = type == NodeType.GARDEN
 
     fun displayLabel(): String {
         if (type == NodeType.GARDEN) return NodeType.GARDEN.label
