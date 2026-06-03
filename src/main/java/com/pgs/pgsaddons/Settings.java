@@ -94,6 +94,9 @@ public class Settings {
                general.notepadWidth = json.contains("\"notepadWidth\"") ? loaded.notepadWidth : general.notepadWidth;
                general.notepadHeight = json.contains("\"notepadHeight\"") ? loaded.notepadHeight : general.notepadHeight;
                general.nodeRenderMode = clamp(loaded.nodeRenderMode, 0, 2);
+               if (loaded.nodeTpPlotName != null) {
+                  general.nodeTpPlotName = loaded.nodeTpPlotName;
+               }
                general.zeroTickHardstoneEnabled = loaded.zeroTickHardstoneEnabled;
                general.ChestHighlightEnabled = loaded.ChestHighlightEnabled;
                general.chestHighlightTracersEnabled = json.contains("\"chestHighlightTracersEnabled\"") ? loaded.chestHighlightTracersEnabled : true;
@@ -258,6 +261,7 @@ public class Settings {
       public int notepadWidth = 180;
       public int notepadHeight = 120;
       public int nodeRenderMode = 0;
+      public String nodeTpPlotName = "";
       public boolean zeroTickHardstoneEnabled = false;
       public boolean ChestHighlightEnabled = true;
       public boolean chestHighlightTracersEnabled = true;

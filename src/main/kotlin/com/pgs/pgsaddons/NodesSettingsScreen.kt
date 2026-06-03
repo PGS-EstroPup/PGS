@@ -3,6 +3,7 @@ package com.pgs.pgsaddons
 import com.pgs.pgsaddons.features.DrawNodes
 import com.pgs.pgsaddons.features.NodeManager
 import com.pgs.pgsaddons.features.AutoFarm2
+import com.pgs.pgsaddons.features.sendChatCommand
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import com.pgs.pgsaddons.utils.PgsSliderWidget
 import net.minecraft.client.gui.Click
@@ -119,11 +120,23 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
                 nodeProfileButton.setMessage(Text.literal(nodeProfileNameDraft))
             }
         }
+        val nodePlotInput = textInput("Plot", Settings.general.nodeTpPlotName) {
+            Settings.general.nodeTpPlotName = it
+            Settings.save()
+        }
+        val nodeTpToPlotButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("TP To Plot")) {
+            val plot = Settings.general.nodeTpPlotName.trim()
+            if (plot.isNotEmpty()) {
+                client?.player?.connection?.sendChatCommand("tptoplot $plot")
+            }
+        }
 
         group("Node Placement", listOf(
             option("Node Profile", nodeProfileButton, "Switches the placed-node preset."),
             option("Profile Name", nodeProfileNameInput, "Name for the current placed-node preset."),
             option("Apply Name", nodeRenameButton, "Renames the current placed-node preset."),
+            option("Plot Name", nodePlotInput, "Plot name used by the Nodes TP To Plot button."),
+            option("TP To Plot", nodeTpToPlotButton, "Runs /tptoplot with the plot name above."),
             keybindOption("Toggle Node Placement", DrawNodes.toggleKey, "Right click to place, Right click again to configure"),
             option("Node Render", nodeRenderModeButton(), "Controls whether placed nodes render always, only within 30 blocks, or never.")
         ))
