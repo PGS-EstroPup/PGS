@@ -5,6 +5,8 @@ import net.minecraft.client.gui.DrawContext
 import net.minecraft.client.gui.screen.Screen
 import net.minecraft.client.gui.widget.ClickableWidget
 import net.minecraft.text.Text
+import java.awt.Desktop
+import java.net.URI
 
 class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     private var scrollY = 0.0
@@ -18,6 +20,10 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     private val panelHeight get() = ThreePaneSettingsLayout.panelHeight(height)
     private val startX get() = (width - panelWidth) / 2
     private val startY get() = ((height - panelHeight) / 2).coerceAtLeast(10)
+
+    companion object {
+        private const val AUTO_DUNGEONS_EDIT_URL = "https://www.youtube.com/watch?v=mDUOibsW36w"
+    }
 
     override fun init() {
         groups.clear()
@@ -48,12 +54,18 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             Settings.general.starredMobEspColor = color
             Settings.save()
         }
+        val autoDungeonsEditButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Edit")) {
+            openAutoDungeonsLink()
+        }
 
         group("Combat", listOf(
             option("No Term Swing", toggle(Settings.general.noTerminatorSwingEnabled) { Settings.general.noTerminatorSwingEnabled = it }),
             option("I Hate Diorite", toggle(Settings.general.iHateDioriteEnabled) { Settings.general.iHateDioriteEnabled = it }),
             option("Arrow Tracker HUD", toggle(Settings.general.arrowTypeTrackerEnabled) { Settings.general.arrowTypeTrackerEnabled = it }),
             option("TP Maze Tracer", toggle(Settings.general.tpMazeTracerEnabled) { Settings.general.tpMazeTracerEnabled = it })
+        ))
+        group("Auto Dungeons", listOf(
+            option("Auto Dungeons", autoDungeonsEditButton)
         ))
         group("Starred Mobs ESP", listOf(
             option("Main Toggle", toggle(Settings.general.starredMobEspEnabled) { Settings.general.starredMobEspEnabled = it }),
@@ -82,6 +94,26 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     }
 
     private fun onOff(value: Boolean): String = if (value) "Â§aON" else "Â§cOFF"
+
+    private fun openAutoDungeonsLink() {
+        val rawUrl = AUTO_DUNGEONS_EDIT_URL.trim()
+        if (rawUrl.isEmpty()) {
+            client?.player?.sendSystemMessage(Text.literal("\u00A7c[PGS] Auto Dungeons link is not set yet."))
+            return
+        }
+
+        val url = if (rawUrl.startsWith("http://", ignoreCase = true) || rawUrl.startsWith("https://", ignoreCase = true)) {
+            rawUrl
+        } else {
+            "https://$rawUrl"
+        }
+
+        try {
+            Desktop.getDesktop().browse(URI.create(url))
+        } catch (_: Exception) {
+            client?.player?.sendSystemMessage(Text.literal("\u00A7c[PGS] Could not open Auto Dungeons link."))
+        }
+    }
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         ThreePaneSettingsLayout.hide(groups)

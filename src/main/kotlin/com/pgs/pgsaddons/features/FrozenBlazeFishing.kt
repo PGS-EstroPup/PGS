@@ -23,6 +23,7 @@ object FrozenBlazeFishing {
 
     private var armedAfterCast = false
     private var active = false
+    private var hasSessionOrigin = false
     private var originX = 0.0
     private var originZ = 0.0
     private var originYaw = 0f
@@ -44,6 +45,7 @@ object FrozenBlazeFishing {
 
             val stack = player.getItemInHand(hand)
             if (stack.item == Items.FISHING_ROD) {
+                rememberSessionOrigin(player)
                 armedAfterCast = true
                 ignoreInputUntilMillis = System.currentTimeMillis() + 700L
             }
@@ -79,7 +81,7 @@ object FrozenBlazeFishing {
     private fun tick(client: MinecraftClient) {
         val player = client.player
         if (!Settings.general.frozenBlazeFishingEnabled || client.screen != null || player == null) {
-            stop()
+            stop(clearSession = true)
             return
         }
 
@@ -90,8 +92,13 @@ object FrozenBlazeFishing {
 
         if (!active) return
 
-        if (player.fishing == null || player.mainHandItem.item != Items.FISHING_ROD) {
-            stop()
+        if (player.mainHandItem.item != Items.FISHING_ROD) {
+            stop(clearSession = true)
+            return
+        }
+
+        if (player.fishing == null) {
+            stopActiveMovement()
             return
         }
 
@@ -103,10 +110,7 @@ object FrozenBlazeFishing {
 
     private fun start(player: PlayerEntity) {
         active = true
-        originX = player.x
-        originZ = player.z
-        originYaw = player.yaw
-        originPitch = player.pitch
+        rememberSessionOrigin(player)
         val radians = Math.toRadians((originYaw + 90.0).toDouble())
         sideX = -sin(radians)
         sideZ = cos(radians)
@@ -119,9 +123,26 @@ object FrozenBlazeFishing {
         holdCrouch(true)
     }
 
-    private fun stop() {
-        if (!active && !armedAfterCast) return
+    private fun rememberSessionOrigin(player: PlayerEntity) {
+        if (hasSessionOrigin) return
+
+        hasSessionOrigin = true
+        originX = player.x
+        originZ = player.z
+        originYaw = player.yaw
+        originPitch = player.pitch
+    }
+
+    private fun stop(clearSession: Boolean = true) {
+        if (!active && !armedAfterCast && (!clearSession || !hasSessionOrigin)) return
         armedAfterCast = false
+        stopActiveMovement()
+        if (clearSession) {
+            hasSessionOrigin = false
+        }
+    }
+
+    private fun stopActiveMovement() {
         active = false
         moveDirection = 0
         holdCrouch(false)
