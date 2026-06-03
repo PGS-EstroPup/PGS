@@ -36,7 +36,7 @@ object AutoFishKiller {
         releaseJumpIfNeeded(client)
 
         val player = client.player ?: return
-        val world = client.world ?: return
+        val world = client.level ?: return
 
         if (!Settings.general.autofishWithKillerEnabled) return
 
@@ -44,18 +44,20 @@ object AutoFishKiller {
         if (pauseForGui(client, now)) return
 
         if (!aSTriggered) {
-            if (player.mainHandStack.item != Items.FISHING_ROD) return
+            if (player.mainHandItem.item != Items.FISHING_ROD) return
 
             val pos = Vec3d(player.x, player.y, player.z)
             val range = Settings.general.autofishRange.toDouble()
-            val rangeBox = Box.of(pos, range * 2, range * 2, range * 2)
+            val rangeBox = Box.ofSize(pos, range * 2, range * 2, range * 2)
 
             val found =
-                    world
-                            .getEntitiesByClass(ArmorStandEntity::class.java, rangeBox) { stand ->
-                                stand?.hasCustomName() == true && stand.name.string.contains("!!!")
+                    world.entitiesForRendering()
+                            .filterIsInstance<ArmorStandEntity>()
+                            .any { stand ->
+                                stand.hasCustomName() &&
+                                        stand.name.string.contains("!!!") &&
+                                        rangeBox.contains(stand.position())
                             }
-                            .isNotEmpty()
 
             if (found) {
                 aSTriggered = true
@@ -104,7 +106,7 @@ object AutoFishKiller {
     }
 
     private fun pauseForGui(client: MinecraftClient, now: Long): Boolean {
-        if (client.currentScreen != null) {
+        if (client.screen != null) {
             if (guiPausedAtMillis == null) guiPausedAtMillis = now
             return true
         }
@@ -120,14 +122,14 @@ object AutoFishKiller {
 
     private fun interact(player: ClientPlayerEntity, client: MinecraftClient) {
         try {
-            client.interactionManager?.interactItem(player, Hand.MAIN_HAND)
+            client.gameMode?.interactItem(player, Hand.MAIN_HAND)
             player.swingHand(Hand.MAIN_HAND, true)
         } catch (e: Exception) {}
     }
 
     private fun jump(client: MinecraftClient) {
         try {
-            KeyMapping.setKeyPressed((client.options.jumpKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), true)
+            net.minecraft.client.KeyMapping.set((client.options.keyJump as KeyMappingAccessor).`pgsAddons$getBoundKey`(), true)
             jumpReleasePending = true
         } catch (e: Exception) {}
     }
@@ -136,8 +138,12 @@ object AutoFishKiller {
         if (!jumpReleasePending) return
 
         try {
-            KeyMapping.setKeyPressed((client.options.jumpKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), false)
+            net.minecraft.client.KeyMapping.set((client.options.keyJump as KeyMappingAccessor).`pgsAddons$getBoundKey`(), false)
         } catch (e: Exception) {}
         jumpReleasePending = false
     }
 }
+
+
+
+

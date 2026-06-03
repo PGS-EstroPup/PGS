@@ -32,7 +32,7 @@ class PgsSliderWidget(
         onUpdate(currentValue)
     }
 
-    override fun renderWidget(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+    override fun extractWidgetRenderState(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         if (!visible) return
 
         val hovered = isMouseOver(mouseX.toDouble(), mouseY.toDouble())
@@ -57,9 +57,9 @@ class PgsSliderWidget(
 
         // Text rendering - Always White
         val textColor = 0xFFFFFFFF.toInt()
-        val textWidth = MinecraftClient.getInstance().textRenderer.getWidth(this.message)
-        context.drawText(
-            MinecraftClient.getInstance().textRenderer,
+        val textWidth = MinecraftClient.getInstance().font.width(this.message)
+        context.text(
+            MinecraftClient.getInstance().font,
             this.message,
             this.x + (this.width - textWidth) / 2,
             this.y + (this.height - 9) / 2,

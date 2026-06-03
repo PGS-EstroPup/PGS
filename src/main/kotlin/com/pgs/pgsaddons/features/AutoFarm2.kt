@@ -35,6 +35,7 @@ enum class AutoFarmAction(val id: String, val label: String) {
     STOP_ACTION("STOP_ACTION", "⏹ Stop Action"),
     INTERACT_MOUSEMAT("INTERACT_MOUSEMAT", "🖱 Use Mousemat"),
     INTERACT_ROD("INTERACT_ROD", "🎣 Use Rod"),
+    AUTO_SPRAY("AUTO_SPRAY", "Auto Spray"),
     INTERACT_VACUUM_UNTIL_0_PESTS("INTERACT_VACUUM_UNTIL_0_PESTS", "🐜 Tracking Vacuum"),
     HOLD_VACUUM_5S("HOLD_VACUUM_5S", "🐜 Vacuum Interact"),
     HOLD_HOE("HOLD_HOE", "🌿 Hold Hoe"),
@@ -47,7 +48,8 @@ enum class AutoFarmAction(val id: String, val label: String) {
     SLOT_SWAP("SLOT_SWAP", "🔀 Slot Swap"),
     REPEAT("REPEAT", "∞ Start Over"),
     START_MOVEMENT("START_MOVEMENT", "▶ Start Movement"),
-    STOP_MOVEMENT("STOP_MOVEMENT", "⏹ Stop Movement");
+    STOP_MOVEMENT("STOP_MOVEMENT", "⏹ Stop Movement"),
+    AUTO_SELL("AUTO_SELL", "♲ Auto Sell");
 
     companion object {
         fun fromId(id: String): AutoFarmAction? = entries.firstOrNull { it.id == id }
@@ -65,6 +67,7 @@ object AutoFarm2 {
     private var actionIndex = 0
     private var waitTicks = 0f
     private var waitingForSlotSwap = false
+    private var waitingForAutoSell = false
     private var waitingForWardrobe = false
     private var pendingWardrobeSlot = ""
     private var pendingWardrobeClickSlot: Int? = null
@@ -93,16 +96,17 @@ object AutoFarm2 {
     private var cooldownReady = false
     private val completedActions = mutableMapOf<Cycle, Int>()
 
-    private const val NODE_TICK_OFFSET = 2
+    private const val MIN_NODE_TICK_OFFSET = 6
+    private const val MAX_NODE_TICK_OFFSET = 12
 
     fun init() {
         enabled = Settings.general.autoFarm2Enabled
         toggleKey = KeyBindingHelper.registerKeyBinding(
-            KeyBinding("PGS Toggle Auto Farm 2.0", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_U, KeyBinding.Category.MISC)
+            KeyBinding("PGS Toggle Auto Farm 2.0", com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_U, net.minecraft.client.KeyMapping.Category.MISC)
         )
 
         ClientTickEvents.END_CLIENT_TICK.register { client ->
-            while (toggleKey.wasPressed()) toggle()
+            while (toggleKey.consumeClick()) toggle()
             tick(client)
         }
 
@@ -113,8 +117,8 @@ object AutoFarm2 {
                 val slot = pendingWardrobeSlot.toIntOrNull()?.plus(35)
                 if (slot != null) {
                     pendingWardrobeClickSlot = slot
-                    pendingWardrobeSyncId = screen.screenHandler.syncId
-                    wardrobeClickDelayTicks = 5f
+                    pendingWardrobeSyncId = screen.menu.syncId
+                    wardrobeClickDelayTicks = randomDelayTicks(5)
                 }
             }
         }
@@ -132,6 +136,8 @@ object AutoFarm2 {
         Settings.save()
     }
 
+    fun isRunning(): Boolean = enabled
+
     private fun pause() {
         enabled = false
         Settings.general.autoFarm2Enabled = false
@@ -144,6 +150,7 @@ object AutoFarm2 {
         timedVacuumActive = false
         timedVacuumTicks = 0f
         waitingForSlotSwap = false
+        waitingForAutoSell = false
         waitingForWardrobe = false
         resetNodeDelay()
         resetWardrobeClick()
@@ -156,9 +163,25 @@ object AutoFarm2 {
         resetProgress()
     }
 
+    fun resetToCycle1() {
+        waitingForSlotSwap = false
+        waitingForAutoSell = false
+        waitingForWardrobe = false
+        resetWardrobeClick()
+        resetNodeDelay()
+        resetMousematClick()
+        vacuumActive = false
+        timedVacuumActive = false
+        timedVacuumTicks = 0f
+        movementActive = false
+        resetProgress()
+        message("Reset to C1")
+    }
+
     fun startCycle2FromPestCooldown(): Boolean {
         if (!enabled || cycle != Cycle.C1) return false
         waitingForSlotSwap = false
+        waitingForAutoSell = false
         vacuumActive = false
         timedVacuumActive = false
         timedVacuumTicks = 0f
@@ -181,7 +204,7 @@ object AutoFarm2 {
 
     fun applyMovementInputOverride(input: Input) {
         if (!enabled) return
-        if (mc.currentScreen != null) {
+        if (mc.screen != null) {
             (input as InputAccessor).`pgsAddons$setMovementVector`(Vec2f(0f, 0f))
             (input as InputAccessor).`pgsAddons$setPlayerInput`(PlayerInput(false, false, false, false, false, false, false))
             return
@@ -208,7 +231,7 @@ object AutoFarm2 {
     private fun tick(client: MinecraftClient) {
         if (!enabled || client.player == null) return
 
-        if (client.currentScreen != null) {
+        if (client.screen != null) {
             releaseWorldInputs()
             if (waitingForWardrobe) {
                 handleWardrobeTick(client)
@@ -235,6 +258,7 @@ object AutoFarm2 {
             return
         }
         if (waitingForSlotSwap) return
+        if (waitingForAutoSell) return
         if (vacuumActive) {
             runVacuumTick(client)
             return
@@ -262,6 +286,13 @@ object AutoFarm2 {
             AutoFarmAction.STOP_ACTION -> stop()
             AutoFarmAction.INTERACT_MOUSEMAT -> useMousematSlot(Settings.general.autoFarm2MousematSlot)
             AutoFarmAction.INTERACT_ROD -> interactSlot(Settings.general.autoFarm2RodSlot)
+            AutoFarmAction.AUTO_SPRAY -> {
+                if (FarmingTracker.isSprayNone()) {
+                    interactSlot(Settings.general.autoFarm2SpraySlot)
+                } else {
+                    next()
+                }
+            }
             AutoFarmAction.INTERACT_VACUUM_UNTIL_0_PESTS -> {
                 selectSlot(Settings.general.autoFarm2VacuumSlot)
                 vacuumActive = true
@@ -270,23 +301,23 @@ object AutoFarm2 {
             AutoFarmAction.HOLD_VACUUM_5S -> {
                 selectSlot(Settings.general.autoFarm2VacuumSlot)
                 timedVacuumActive = true
-                timedVacuumTicks = 100f
+                timedVacuumTicks = ThreadLocalRandom.current().nextInt(50, 71).toFloat()
             }
             AutoFarmAction.HOLD_HOE -> {
                 selectSlot(Settings.general.autoFarm2HoeSlot)
                 next()
             }
             AutoFarmAction.SET_SPAWN -> {
-                client.networkHandler?.sendChatCommand("setspawn")
+                client?.player?.connection?.sendChatCommand("setspawn")
                 pauseThenNext(10)
             }
             AutoFarmAction.WARP_SPAWN -> {
-                client.networkHandler?.sendChatCommand("warp garden")
+                client?.player?.connection?.sendChatCommand("warp garden")
                 pauseThenNext(40)
             }
             AutoFarmAction.TPTOPLOT -> {
                 val plot = Settings.general.autoFarm2PlotName.trim()
-                if (plot.isNotEmpty()) client.networkHandler?.sendChatCommand("tptoplot $plot")
+                if (plot.isNotEmpty()) client?.player?.connection?.sendChatCommand("tptoplot $plot")
                 pauseThenNext(40)
             }
             AutoFarmAction.ARMOR_SLOT_1 -> runWardrobe(Settings.general.autoFarm2ArmorSlot1)
@@ -299,9 +330,16 @@ object AutoFarm2 {
                     next()
                 })
             }
+            AutoFarmAction.AUTO_SELL -> {
+                waitingForAutoSell = true
+                AutoSell.execute(onComplete = {
+                    waitingForAutoSell = false
+                    next()
+                })
+            }
             AutoFarmAction.REPEAT -> {
                 cooldownReady = false
-                completedActions.clear()
+                resetProgress()
                 startCycle(Cycle.C1)
             }
             AutoFarmAction.START_MOVEMENT -> {
@@ -321,7 +359,7 @@ object AutoFarm2 {
     private fun interactSlot(slot: Int) {
         selectSlot(slot)
         val player = mc.player ?: return
-        mc.interactionManager?.interactItem(player, Hand.MAIN_HAND)
+        mc.gameMode?.interactItem(player, Hand.MAIN_HAND)
         player.swingHand(Hand.MAIN_HAND, true)
         pauseThenNext(8)
     }
@@ -329,7 +367,7 @@ object AutoFarm2 {
     private fun useMousematSlot(slot: Int) {
         selectSlot(slot)
         mousematActive = true
-        mousematHoldTicks = 7f
+        mousematHoldTicks = randomDelayTicks(7)
         mousematClicksRemaining = 3
         mousematClickDown = false
         setAttackKeyPressed(true)
@@ -362,7 +400,7 @@ object AutoFarm2 {
             mousematClickDown = false
             mousematClicksRemaining--
         } else {
-            KeyMapping.setKeyPressed((mc.options.attackKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), true)
+            net.minecraft.client.KeyMapping.set((mc.options.keyAttack as KeyMappingAccessor).`pgsAddons$getBoundKey`(), true)
             mousematClickDown = true
         }
     }
@@ -386,7 +424,7 @@ object AutoFarm2 {
         if (vacuumInteractTicks <= 0f) {
             val player = client.player ?: return
             if (lookAtNearestPest(client)) {
-                client.interactionManager?.interactItem(player, Hand.MAIN_HAND)
+                client.gameMode?.interactItem(player, Hand.MAIN_HAND)
                 player.swingHand(Hand.MAIN_HAND, true)
                 vacuumInteractTicks = ThreadLocalRandom.current().nextInt(7, 13).toFloat()
             } else {
@@ -427,8 +465,8 @@ object AutoFarm2 {
 
     private fun lookAtNearestPest(client: MinecraftClient): Boolean {
         val player = client.player ?: return false
-        val world = client.world ?: return false
-        val target = world.entities
+        val world = client.level ?: return false
+        val target = world.entitiesForRendering()
             .asSequence()
             .filter { it !== player && !it.isRemoved && isVacuumPest(it) }
             .minByOrNull { it.squaredDistanceTo(player) }
@@ -467,16 +505,16 @@ object AutoFarm2 {
         waitingForWardrobe = true
         pendingWardrobeClickSlot = null
         pendingWardrobeSyncId = null
-        wardrobeCommandDelayTicks = 5f
+        wardrobeCommandDelayTicks = randomDelayTicks(5)
         wardrobeClickDelayTicks = 0f
-        mc.networkHandler?.sendChatCommand("wardrobe")
+        mc?.player?.connection?.sendChatCommand("wardrobe")
     }
 
     private fun handleWardrobeTick(client: MinecraftClient) {
         val clickSlot = pendingWardrobeClickSlot ?: return
         val syncId = pendingWardrobeSyncId ?: return
 
-        if (client.currentScreen !is HandledScreen<*>) {
+        if (client.screen !is HandledScreen<*>) {
             resetWardrobeClick()
             next()
             return
@@ -493,8 +531,8 @@ object AutoFarm2 {
         }
 
         val player = client.player ?: return
-        client.interactionManager?.clickSlot(syncId, clickSlot, 0, SlotActionType.PICKUP, player)
-        player.closeHandledScreen()
+        client.gameMode?.clickSlot(syncId, clickSlot, 0, SlotActionType.PICKUP, player)
+        player.closeContainer()
         resetWardrobeClick()
         pauseThenNext(5)
     }
@@ -517,7 +555,7 @@ object AutoFarm2 {
         }
 
         if (shouldWaitForNextCycle()) {
-            waitTicks = max(waitTicks, 5f)
+            waitTicks = max(waitTicks, randomDelayTicks(5))
             return
         }
         stop()
@@ -586,10 +624,10 @@ object AutoFarm2 {
 
     private fun updateLastNodeDirection() {
         val player = mc.player ?: return
-        val node = (NodeManager.nodeAt(player.blockPos.down()) ?: NodeManager.nodeAt(player.blockPos))?.takeIf { it.isMovementNode }
-        val offset = NODE_TICK_OFFSET
+        val node = currentMovementNode() ?: return
+        val offset = randomNodeTickOffset()
 
-        if (node != null && lastAppliedMovementNodePos != node.pos) {
+        if (lastAppliedMovementNodePos != node.pos) {
             if (offset <= 0) {
                 applyMovementNode(node.pos, node.vertical, node.horizontal)
                 return
@@ -609,6 +647,29 @@ object AutoFarm2 {
         if (pendingMovementTicks <= 0f) {
             applyMovementNode(pendingPos, pendingMovementVertical, pendingMovementHorizontal)
         }
+    }
+
+    private fun currentMovementNode(): PathNode? {
+        val player = mc.player ?: return null
+        val exact = (NodeManager.nodeAt(player.blockPos.down()) ?: NodeManager.nodeAt(player.blockPos))
+            ?.takeIf { it.isMovementNode }
+        if (exact != null) return exact
+
+        val px = player.x
+        val py = player.blockPos.y
+        val pz = player.z
+        return NodeManager.nodes
+            .asSequence()
+            .filter { it.isMovementNode }
+            .filter { it.pos.y == py || it.pos.y == py - 1 }
+            .map { node ->
+                val dx = node.pos.x + 0.5 - px
+                val dz = node.pos.z + 0.5 - pz
+                node to (dx * dx + dz * dz)
+            }
+            .filter { it.second <= 0.9 * 0.9 }
+            .minByOrNull { it.second }
+            ?.first
     }
 
     private fun applyMovementNode(pos: BlockPos, vertical: NodeVerticalDirection, horizontal: NodeHorizontalDirection) {
@@ -632,13 +693,23 @@ object AutoFarm2 {
     private fun next() {
         actionIndex++
         markCurrentActionDone()
-        waitTicks = max(waitTicks, 1f)
+        waitTicks = max(waitTicks, randomDelayTicks(1))
     }
 
     private fun pauseThenNext(ticks: Int) {
         actionIndex++
         markCurrentActionDone()
-        waitTicks = ticks.toFloat()
+        waitTicks = randomDelayTicks(ticks)
+    }
+
+    private fun randomDelayTicks(baseTicks: Int): Float {
+        val minTicks = max(1, baseTicks - 2)
+        val maxTicks = max(minTicks, baseTicks + 2)
+        return ThreadLocalRandom.current().nextInt(minTicks, maxTicks + 1).toFloat()
+    }
+
+    private fun randomNodeTickOffset(): Int {
+        return ThreadLocalRandom.current().nextInt(MIN_NODE_TICK_OFFSET, MAX_NODE_TICK_OFFSET + 1)
     }
 
     private fun markCurrentActionDone() {
@@ -666,20 +737,11 @@ object AutoFarm2 {
     }
 
     private fun startFarmAttack() {
-        if (Settings.general.autoFarm2ToggleAttackMode) {
-            pulseAttackKey()
-        } else {
-            setAttackHeld(true)
-        }
+        setAttackHeld(true)
     }
 
     private fun stopFarmAttack() {
-        if (Settings.general.autoFarm2ToggleAttackMode) {
-            attackHeld = false
-            pulseAttackKey()
-        } else {
-            setAttackHeld(false)
-        }
+        setAttackHeld(false)
     }
 
     private fun pulseAttackKey() {
@@ -705,11 +767,11 @@ object AutoFarm2 {
     }
 
     private fun setAttackKeyPressed(pressed: Boolean) {
-        KeyMapping.setKeyPressed((mc.options.attackKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), pressed)
+        net.minecraft.client.KeyMapping.set((mc.options.keyAttack as KeyMappingAccessor).`pgsAddons$getBoundKey`(), pressed)
     }
 
     private fun setUseKeyPressed(pressed: Boolean) {
-        KeyMapping.setKeyPressed((mc.options.useKey as KeyMappingAccessor).`pgsAddons$getBoundKey`(), pressed)
+        net.minecraft.client.KeyMapping.set((mc.options.keyUse as KeyMappingAccessor).`pgsAddons$getBoundKey`(), pressed)
     }
 
     private fun releaseWorldInputs() {
@@ -763,6 +825,10 @@ object AutoFarm2 {
     }
 
     private fun message(text: String) {
-        mc.player?.sendMessage(Text.literal("§b[AutoFarm 2.0] §7$text"), false)
+        mc.player?.sendSystemMessage(Text.literal("§b[AutoFarm 2.0] §7$text"))
     }
 }
+
+
+
+

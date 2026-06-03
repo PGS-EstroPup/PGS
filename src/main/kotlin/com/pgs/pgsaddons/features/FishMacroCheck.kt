@@ -57,8 +57,8 @@ object FishMacroCheck {
             val isManualInput = mouseMoved || 
                                 client.options.forwardKey.isPressed || client.options.backKey.isPressed || 
                                 client.options.leftKey.isPressed || client.options.rightKey.isPressed ||
-                                client.options.jumpKey.isPressed || client.options.sneakKey.isPressed ||
-                                client.options.useKey.isPressed || client.options.attackKey.isPressed
+                                client.options.keyJump.isPressed || client.options.sneakKey.isPressed ||
+                                client.options.keyUse.isPressed || client.options.keyAttack.isPressed
 
             // --- 1. IDLE DETECTION (Standard Alert) ---
             if (isAutoFishEnabled && isMacroCheckEnabled && catchCount >= 5) {
@@ -66,7 +66,7 @@ object FishMacroCheck {
                         player.yaw != lastYaw || player.pitch != lastPitch
                 
                 // Standard idle reset: either moved, pushed keys, or mod interacted
-                if (movedSinceLastTick || mouseMoved || player.handSwinging || client.options.useKey.isPressed) {
+                if (movedSinceLastTick || mouseMoved || player.handSwinging || client.options.keyUse.isPressed) {
                     idleTicks = 0
                 } else {
                     idleTicks++
@@ -76,8 +76,8 @@ object FishMacroCheck {
                     if (soundsRemaining <= 0) {
                         soundsRemaining = 10
                         soundDelay = 0
-                        client.inGameHud.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
-                        client.inGameHud.setTitleTicks(10, 60, 20)
+                        client.gui.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
+                        client.gui.setTitleTicks(10, 60, 20)
                     }
                     idleTicks = 0
                 }
@@ -120,8 +120,8 @@ object FishMacroCheck {
                             if (soundsRemaining < 20) {
                                 soundsRemaining = 20
                                 soundDelay = 0
-                                client.inGameHud.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
-                                client.inGameHud.setTitleTicks(10, 60, 20)
+                                client.gui.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
+                                client.gui.setTitleTicks(10, 60, 20)
                             }
                         }
                     }
@@ -150,11 +150,11 @@ object FishMacroCheck {
             // Sequential sound logic
             if (soundsRemaining > 0) {
                 if (soundDelay <= 0) {
-                    player.playSound(SoundEvents.BLOCK_ANVIL_PLACE, 10.0f, 1.0f)
+                    player.playSound(SoundEvents.ANVIL_PLACE, 10.0f, 1.0f)
                     
                     // Display the alert title when sound plays
-                    client.inGameHud.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
-                    client.inGameHud.setTitleTicks(0, 45, 5)
+                    client.gui.setTitle(net.minecraft.text.Text.literal("§c" + Settings.general.macroCheckAlertText))
+                    client.gui.setTitleTicks(0, 45, 5)
                     
                     soundsRemaining--
                     soundDelay = 40

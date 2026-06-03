@@ -5,10 +5,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
-import net.minecraft.item.Item
 import net.minecraft.item.ItemStack
 import net.minecraft.item.tooltip.TooltipType
-import net.minecraft.text.Text
 import net.minecraft.util.Identifier
 
 object ArrowTypeTracker {
@@ -23,7 +21,7 @@ object ArrowTypeTracker {
         }
 
         HudElementRegistry.addLast(
-            Identifier.of("pgs_addons", "arrow_type_tracker")
+            Identifier.fromNamespaceAndPath("pgs_addons", "arrow_type_tracker")
         ) { context, _ ->
             onRenderHud(context)
         }
@@ -42,7 +40,7 @@ object ArrowTypeTracker {
 
         selectedArrowType = null
         for (slot in inventorySlots) {
-            val stack = player.inventory.getStack(slot)
+            val stack = player.inventory.getItem(slot)
             val arrowType = getSelectedArrowType(stack)
             if (arrowType != null) {
                 selectedArrowType = arrowType
@@ -61,25 +59,29 @@ object ArrowTypeTracker {
         val x = Settings.general.arrowTypeTrackerX
         val y = Settings.general.arrowTypeTrackerY
         val arrowType = if (mockup) "Armorshred Arrow" else selectedArrowType ?: return
+        val text = "\u00A7e\u00A7l[ $arrowType ]"
 
-        context.drawText(
-            mc.textRenderer,
-            Text.literal("§e§l[ $arrowType ]"),
-            x,
-            y,
-            0xFF55FFFF.toInt(),
-            true
-        )
+        val width = hudWidth(text)
+        val bodyY = HudPanel.draw(context, x, y, width, 38, "Arrow Type")
+        HudPanel.drawCenteredLine(context, text, x, width, bodyY, 0xFF55FFFF.toInt())
+    }
+
+    fun mockupWidth(): Int = hudWidth("\u00A7e\u00A7l[ Armorshred Arrow ]")
+
+    private fun hudWidth(text: String): Int {
+        val titleWidth = mc.font.width("Arrow Type")
+        val textWidth = mc.font.width(text)
+        return (maxOf(titleWidth, textWidth) + HudPanel.PADDING * 2).coerceAtLeast(1)
     }
 
     private fun getSelectedArrowType(stack: ItemStack): String? {
-        if (stack.isEmpty) return null
+        if (stack.isEmpty()) return null
         if (!itemNameContains(stack, "Arrow Swapper")) return null
 
-        val tooltip = stack.getTooltip(
-            Item.TooltipContext.DEFAULT,
+        val tooltip = stack.getTooltipLines(
+            net.minecraft.world.item.Item.TooltipContext.EMPTY,
             mc.player,
-            TooltipType.BASIC
+            TooltipType.NORMAL
         )
 
         for (line in tooltip) {
@@ -97,7 +99,7 @@ object ArrowTypeTracker {
     }
 
     private fun stripFormatting(text: String): String {
-        return text.replace(Regex("Â§."), "")
+        return text.replace(Regex("\u00A7."), "")
     }
 
     private fun normalizeText(text: String): String {

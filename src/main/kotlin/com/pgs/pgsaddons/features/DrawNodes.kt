@@ -13,6 +13,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents
 import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawCenteredTextWithShadow
 import net.minecraft.client.gui.Click
 import net.minecraft.client.gui.screen.Screen
 import net.minecraft.client.option.KeyBinding
@@ -20,6 +21,7 @@ import net.minecraft.client.render.VertexConsumer
 import net.minecraft.client.util.InputUtil
 import net.minecraft.text.Text
 import net.minecraft.util.ActionResult
+import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Box
 import org.lwjgl.glfw.GLFW
@@ -131,7 +133,7 @@ object NodeManager {
         placementActive = !placementActive
         val mc = MinecraftClient.getInstance()
         val status = if (placementActive) "§aON" else "§cOFF"
-        mc.player?.sendMessage(Text.literal("§b[DrawNodes] §7Node Placement $status"), false)
+        mc.player?.sendSystemMessage(Text.literal("§b[DrawNodes] §7Node Placement $status"))
     }
 
     /** Returns the node at [pos] if one exists, null otherwise. */
@@ -160,6 +162,43 @@ object NodeManager {
         Settings.save()
         nodes.clear()
         load()
+    }
+
+    fun renameProfile(profileName: String): Boolean {
+        val oldName = normalizeProfileName(Settings.general.nodeActiveProfile)
+        val newName = normalizeProfileName(profileName)
+        if (oldName == newName) return true
+
+        return try {
+            save()
+            Files.createDirectories(PROFILE_DIR)
+            val oldPath = PROFILE_DIR.resolve("${safeProfileName(oldName)}.json")
+            val newPath = PROFILE_DIR.resolve("${safeProfileName(newName)}.json")
+            if (Files.exists(newPath)) return false
+            if (Files.exists(oldPath)) {
+                Files.move(oldPath, newPath)
+            }
+            Settings.general.nodeActiveProfile = newName
+            Settings.save()
+            true
+        } catch (e: Exception) {
+            System.err.println("[pgs_addons] Failed to rename node profile: $e")
+            false
+        }
+    }
+
+    fun profileNames(): List<String> {
+        return try {
+            Files.createDirectories(PROFILE_DIR)
+            Files.list(PROFILE_DIR).use { stream ->
+                stream
+                    .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".json") }
+                    .map { it.fileName.toString().removeSuffix(".json") }
+                    .toList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     fun save() {
@@ -252,15 +291,15 @@ object DrawNodes {
         toggleKey = KeyBindingHelper.registerKeyBinding(
             KeyBinding(
                 "PGS Toggle Node Placement",
-                InputUtil.Type.KEYSYM,
+                com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_UNKNOWN,
-                KeyBinding.Category.MISC
+                net.minecraft.client.KeyMapping.Category.MISC
             )
         )
 
         // Poll the keybind every tick
-        ClientTickEvents.END_CLIENT_TICK.register { _ ->
-            while (toggleKey.wasPressed()) {
+        ClientTickEvents.END_CLIENT_TICK.register { client ->
+            while (toggleKey.consumeClick()) {
                 if (com.pgs.pgsaddons.utils.LocationUtils.isInGarden()) {
                     NodeManager.toggle()
                 } else {
@@ -269,6 +308,7 @@ object DrawNodes {
                     )
                 }
             }
+            handleClientNodePlacement(client)
         }
 
         // Intercept right-clicks on blocks
@@ -277,14 +317,7 @@ object DrawNodes {
             if (!com.pgs.pgsaddons.utils.LocationUtils.isInGarden()) return@register ActionResult.PASS
             if (world.isClient && player != null) {
                 val clickedBlock = hitResult.blockPos
-                val mc = MinecraftClient.getInstance()
-
-                val existing = NodeManager.nodeAt(clickedBlock)
-                if (existing != null) {
-                    mc.execute { mc.setScreen(NodeMenuScreen(existing)) }
-                } else {
-                    NodeManager.addNode(clickedBlock)
-                }
+                openOrAddNode(clickedBlock)
                 return@register ActionResult.SUCCESS
             }
             ActionResult.PASS
@@ -294,14 +327,35 @@ object DrawNodes {
         WorldRenderEvents.AFTER_ENTITIES.register(DrawNodes::onRenderWorld)
     }
 
+    private fun handleClientNodePlacement(client: MinecraftClient) {
+        if (!NodeManager.placementActive || client.screen != null) return
+        if (!com.pgs.pgsaddons.utils.LocationUtils.isInGarden()) return
+
+        while (client.options.keyUse.consumeClick()) {
+            val hit = client.hitResult
+            if (hit !is BlockHitResult || hit.type != net.minecraft.world.phys.HitResult.Type.BLOCK) continue
+            openOrAddNode(hit.blockPos)
+        }
+    }
+
+    private fun openOrAddNode(pos: BlockPos) {
+        val mc = MinecraftClient.getInstance()
+        val existing = NodeManager.nodeAt(pos)
+        if (existing != null) {
+            mc.execute { mc.setScreen(NodeMenuScreen(existing)) }
+        } else {
+            NodeManager.addNode(pos)
+        }
+    }
+
     private fun onRenderWorld(context: WorldRenderContext) {
         if (NodeManager.nodes.isEmpty()) return
         if (!com.pgs.pgsaddons.utils.LocationUtils.isInGarden()) return
         if (Settings.general.nodeRenderMode == 2) return
 
-        val matrices = context.matrices()
+        val matrices = context.matrices() ?: return
         val consumers = context.consumers() ?: return
-        val camera = MinecraftClient.getInstance().gameRenderer.camera.cameraPos
+        val camera = MinecraftClient.getInstance().gameRenderer.mainCamera.cameraPos
         val nodesToRender = NodeManager.nodes.filter { shouldRenderNode(it, camera.x, camera.y, camera.z) }
         if (nodesToRender.isEmpty()) return
 
@@ -505,3 +559,12 @@ class NodeMenuScreen(private val node: PathNode) : Screen(Text.literal("Node Opt
 
     override fun shouldPause(): Boolean = false
 }
+
+
+
+
+
+
+
+
+

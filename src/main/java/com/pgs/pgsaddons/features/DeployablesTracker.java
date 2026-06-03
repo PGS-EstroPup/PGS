@@ -4,22 +4,19 @@ import com.pgs.pgsaddons.Settings;
 import com.pgs.pgsaddons.utils.DeployableList;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.TypeFilter;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -30,9 +27,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class DeployablesTracker {
-
+    private static final int HEADER_HEIGHT = 20;
+    private static final int PADDING = 6;
     private static final int SECONDS_BEFORE_EXPIRATION = 10;
-    private static final Pattern FORMATTING_PATTERN = Pattern.compile("\\u00A7[0-9a-fk-or]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern FORMATTING_PATTERN = Pattern.compile("\u00A7[0-9a-fk-or]", Pattern.CASE_INSENSITIVE);
     private static final Pattern TIMER_PATTERN = Pattern.compile("(?:(\\d+)m\\s*)?(\\d+)s", Pattern.CASE_INSENSITIVE);
     private static final Map<String, ActiveDeployable> activeDeployables = new LinkedHashMap<>();
     private static int tickCounter = 0;
@@ -44,13 +42,13 @@ public class DeployablesTracker {
         final String name;
         final int range;
         final boolean flare;
-        Vec3d center;
+        Vec3 center;
         int remainingSeconds;
         Long lastAlertAt = null;
         boolean seenThisScan = false;
         boolean sawTimerThisScan = false;
 
-        ActiveDeployable(DeployableInfo info, Vec3d center) {
+        ActiveDeployable(DeployableInfo info, Vec3 center) {
             this.name = info.name();
             this.range = info.range();
             this.flare = info.flare();
@@ -77,9 +75,34 @@ public class DeployablesTracker {
     public static void init() {
         ClientTickEvents.END_CLIENT_TICK.register(DeployablesTracker::onTick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetAll());
-        HudRenderCallback.EVENT.register(DeployablesTracker::onRenderHud);
-        UseBlockCallback.EVENT.register(DeployablesTracker::onUseBlock);
-        UseItemCallback.EVENT.register(DeployablesTracker::onUseItem);
+        HudElementRegistry.addLast(
+                Identifier.fromNamespaceAndPath("pgs_addons", "deployables_tracker"),
+                (context, tickCounter) -> {
+                    if (Settings.general.deployablesTrackerEnabled) {
+                        drawHud(context, false);
+                    }
+                }
+        );
+        UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+            if (!world.isClientSide() || !Settings.general.deployablesTrackerEnabled) return InteractionResult.PASS;
+
+            ItemStack stack = player.getItemInHand(hand);
+            DeployableInfo deployable = matchHeldDeployable(stripFormatting(stack.getHoverName()));
+            if (deployable == null) return InteractionResult.PASS;
+
+            addOrRefresh(deployable, Vec3.atCenterOf(hitResult.getBlockPos()), deployable.countdownSeconds());
+            return InteractionResult.PASS;
+        });
+        UseItemCallback.EVENT.register((player, world, hand) -> {
+            if (!world.isClientSide() || !Settings.general.deployablesTrackerEnabled) return InteractionResult.PASS;
+
+            ItemStack stack = player.getItemInHand(hand);
+            DeployableInfo deployable = matchHeldDeployable(stripFormatting(stack.getHoverName()));
+            if (deployable == null) return InteractionResult.PASS;
+
+            addOrRefresh(deployable, Vec3.atCenterOf(player.blockPosition()), deployable.countdownSeconds());
+            return InteractionResult.PASS;
+        });
     }
 
     private static DeployableInfo info(String displayName, boolean flare) {
@@ -97,79 +120,41 @@ public class DeployablesTracker {
         return new DeployableInfo(displayName, lookupName, range, countdown, flare);
     }
 
-    private static ActionResult onUseBlock(net.minecraft.entity.player.PlayerEntity player, net.minecraft.world.World world, net.minecraft.util.Hand hand, net.minecraft.util.hit.BlockHitResult hitResult) {
-        if (!world.isClient() || !Settings.general.deployablesTrackerEnabled) return ActionResult.PASS;
-
-        ItemStack stack = player.getStackInHand(hand);
-        String itemName = stripFormatting(stack.getName());
-        DeployableInfo flare = matchFlare(itemName);
-        if (flare == null) return ActionResult.PASS;
-
-        Vec3d center = Vec3d.ofCenter(hitResult.getBlockPos());
-        addOrRefresh(flare, center, flare.countdownSeconds());
-        return ActionResult.PASS;
-    }
-
-    private static ActionResult onUseItem(net.minecraft.entity.player.PlayerEntity player, net.minecraft.world.World world, net.minecraft.util.Hand hand) {
-        if (!world.isClient() || !Settings.general.deployablesTrackerEnabled) return ActionResult.PASS;
-
-        ItemStack stack = player.getStackInHand(hand);
-        String itemName = stripFormatting(stack.getName());
-        DeployableInfo flare = matchFlare(itemName);
-        if (flare == null) return ActionResult.PASS;
-
-        addOrRefresh(flare, Vec3d.ofCenter(player.getBlockPos()), flare.countdownSeconds());
-        return ActionResult.PASS;
-    }
-
-    private static void onTick(MinecraftClient client) {
-        if (client.world == null || client.player == null)
-            return;
+    private static void onTick(Minecraft client) {
+        if (client.level == null || client.player == null) return;
 
         tickCounter++;
-        if (tickCounter < 20)
-            return;
+        if (tickCounter < 20) return;
         tickCounter = 0;
 
-        if (!Settings.general.deployablesTrackerEnabled)
-            return;
-
-        trackDeployablesStatus(client);
+        if (Settings.general.deployablesTrackerEnabled) {
+            trackDeployablesStatus(client);
+        }
     }
 
-    private static void trackDeployablesStatus(MinecraftClient client) {
-        ClientPlayerEntity player = client.player;
-        if (player == null || client.world == null) return;
-
-        double px = player.getX();
-        double py = player.getY();
-        double pz = player.getZ();
-
-        Box searchBox = new Box(px - 512, py - 256, pz - 512, px + 512, py + 256, pz + 512);
-        List<ArmorStandEntity> armorStands = client.world.getEntitiesByType(
-                TypeFilter.instanceOf(ArmorStandEntity.class),
-                searchBox,
-                e -> true
-        );
+    private static void trackDeployablesStatus(Minecraft client) {
+        if (client.player == null || client.level == null) return;
 
         for (ActiveDeployable deployable : activeDeployables.values()) {
             deployable.seenThisScan = false;
             deployable.sawTimerThisScan = false;
         }
 
-        for (ArmorStandEntity stand : armorStands) {
-            String name = stripFormatting(stand.getCustomName());
-            DeployableInfo info = matchNamedDeployable(name);
+        for (Entity entity : client.level.entitiesForRendering()) {
+            if (!(entity instanceof ArmorStand stand)) continue;
+            if (stand.distanceToSqr(client.player) > 512.0 * 512.0) continue;
+
+            DeployableInfo info = matchNamedDeployable(stripFormatting(stand.getCustomName()));
             if (info == null) continue;
 
-            Integer seconds = parseTimerSeconds(name);
-            addOrRefresh(info, entityPos(stand), seconds);
+            Integer seconds = parseTimerSeconds(stripFormatting(stand.getCustomName()));
+            addOrRefresh(info, stand.position(), seconds);
         }
 
         updateCountdownsAndRanges(client);
     }
 
-    private static void addOrRefresh(DeployableInfo info, Vec3d center, Integer seconds) {
+    private static void addOrRefresh(DeployableInfo info, Vec3 center, Integer seconds) {
         ActiveDeployable active = activeDeployables.get(info.name());
         if (active == null) {
             active = new ActiveDeployable(info, center);
@@ -179,20 +164,18 @@ public class DeployablesTracker {
         active.center = center;
         active.seenThisScan = true;
         active.sawTimerThisScan = seconds != null;
-
         if (seconds != null) {
             active.remainingSeconds = seconds;
         }
     }
 
-    private static void updateCountdownsAndRanges(MinecraftClient client) {
-        ClientPlayerEntity player = client.player;
-        if (player == null) return;
+    private static void updateCountdownsAndRanges(Minecraft client) {
+        if (client.player == null) return;
 
         activeDeployables.entrySet().removeIf(entry -> {
             ActiveDeployable deployable = entry.getValue();
 
-            if (deployable.range > 0 && deployable.center != null && entityPos(player).distanceTo(deployable.center) > deployable.range) {
+            if (deployable.range > 0 && deployable.center != null && client.player.position().distanceTo(deployable.center) > deployable.range) {
                 return true;
             }
 
@@ -215,9 +198,21 @@ public class DeployablesTracker {
 
     private static DeployableInfo matchFlare(String text) {
         if (text == null || !normalize(text).contains("flare")) return null;
-
         for (DeployableInfo info : DEPLOYABLES) {
             if (info.flare() && normalizedTextMatches(text, info)) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+    private static DeployableInfo matchHeldDeployable(String text) {
+        if (text == null) return null;
+        DeployableInfo flare = matchFlare(text);
+        if (flare != null) return flare;
+
+        for (DeployableInfo info : DEPLOYABLES) {
+            if (!info.flare() && normalizedTextMatches(text, info)) {
                 return info;
             }
         }
@@ -227,7 +222,6 @@ public class DeployablesTracker {
     private static DeployableInfo matchNamedDeployable(String text) {
         if (text == null) return null;
         String normalizedText = normalize(text);
-
         for (DeployableInfo info : DEPLOYABLES) {
             if (!info.flare() && normalizedTextMatches(normalizedText, info)) {
                 return info;
@@ -243,7 +237,6 @@ public class DeployablesTracker {
 
     private static Integer parseTimerSeconds(String text) {
         if (text == null) return null;
-
         Matcher matcher = TIMER_PATTERN.matcher(text);
         if (!matcher.find()) return null;
 
@@ -252,27 +245,18 @@ public class DeployablesTracker {
         return (minutes * 60) + seconds;
     }
 
-    private static Vec3d entityPos(net.minecraft.entity.Entity entity) {
-        return new Vec3d(entity.getX(), entity.getY(), entity.getZ());
-    }
-
     private static void resetAll() {
         activeDeployables.clear();
     }
 
     private static String formatTime(int totalSeconds) {
-        if (totalSeconds <= 0)
-            return "";
+        if (totalSeconds <= 0) return "";
         int minutes = (totalSeconds % 3600) / 60;
         int seconds = totalSeconds % 60;
-        if (minutes > 0) {
-            return String.format("%02dm %02ds", minutes, seconds);
-        } else {
-            return String.format("%02ds", seconds);
-        }
+        return minutes > 0 ? String.format("%02dm %02ds", minutes, seconds) : String.format("%02ds", seconds);
     }
 
-    private static String stripFormatting(Text text) {
+    private static String stripFormatting(Component text) {
         if (text == null) return null;
         return FORMATTING_PATTERN.matcher(text.getString()).replaceAll("");
     }
@@ -281,48 +265,81 @@ public class DeployablesTracker {
         return text.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
 
-    private static void playAlert(MinecraftClient client, ActiveDeployable deployable) {
-        client.inGameHud.setTitle(Text.literal(deployable.name + " expires soon!").formatted(Formatting.BOLD));
-        client.inGameHud.setTitleTicks(2, 30, 10);
-        client.player.sendMessage(Text.literal("[PGS] " + deployable.name + " expires soon.").formatted(Formatting.GOLD), false);
+    private static void playAlert(Minecraft client, ActiveDeployable deployable) {
+        client.gui.setTitle(Component.literal(deployable.name + " expires soon!").withStyle(ChatFormatting.BOLD));
+        client.player.sendSystemMessage(Component.literal("[PGS] " + deployable.name + " expires soon.").withStyle(ChatFormatting.GOLD));
         deployable.lastAlertAt = System.currentTimeMillis();
     }
 
-    private static void onRenderHud(DrawContext context, RenderTickCounter tickCounter) {
-        if (!Settings.general.deployablesTrackerEnabled) return;
-        drawHud(context, false);
-    }
-
-    public static void drawHud(DrawContext context, boolean mockup) {
+    public static void drawHud(GuiGraphicsExtractor context, boolean mockup) {
         int x = Settings.general.deployablesOverlayX;
         int y = Settings.general.deployablesOverlayY;
         int spacing = 12;
         int count = 0;
 
+        Collection<ActiveDeployable> deployables = activeDeployables.values();
+        if (!mockup && deployables.isEmpty()) return;
+        List<String> displayLines = mockup ? List.of("Alert: 02m 58s", "Overflux: 56s") : deployables.stream()
+                .map(deployable -> deployable.name + ": " + formatTime(deployable.remainingSeconds))
+                .filter(line -> !line.endsWith(": ") && !line.endsWith(": 00s"))
+                .toList();
+        if (!mockup && displayLines.isEmpty()) return;
+
+        int lineCount = displayLines.size();
+        int height = HEADER_HEIGHT + PADDING + lineCount * spacing + PADDING;
+        int bodyY = drawPanel(context, x, y, hudWidth(displayLines), height, "Deployables");
+
         if (mockup) {
-            context.drawText(MinecraftClient.getInstance().textRenderer, Text.literal("[HUD Editor]").formatted(Formatting.BOLD), x, y + (count * spacing), 0xFF888888, true);
-            count++;
-            context.drawText(MinecraftClient.getInstance().textRenderer, Text.literal("Alert: 02m 58s").formatted(Formatting.BOLD), x, y + (count * spacing), 0xFFFFFFFF, true);
-            count++;
-            context.drawText(MinecraftClient.getInstance().textRenderer, Text.literal("Overflux: 56s").formatted(Formatting.BOLD), x, y + (count * spacing), 0xFFFFFFFF, true);
+            drawLine(context, "Alert: 02m 58s", x + PADDING, bodyY, 0xFFFFFFFF);
+            drawLine(context, "Overflux: 56s", x + PADDING, bodyY + spacing, 0xFFFFFFFF);
             return;
         }
 
-        Collection<ActiveDeployable> deployables = activeDeployables.values();
         for (ActiveDeployable deployable : deployables) {
             String remainingTime = formatTime(deployable.remainingSeconds);
             if (remainingTime.isEmpty() || remainingTime.equals("00s")) continue;
 
             int color = deployable.remainingSeconds <= SECONDS_BEFORE_EXPIRATION ? 0xFFFF5555 : 0xFFFFFFFF;
-            context.drawText(
-                    MinecraftClient.getInstance().textRenderer,
-                    Text.literal(deployable.name + ": " + remainingTime).formatted(Formatting.BOLD),
-                    x,
-                    y + (count * spacing),
-                    color,
-                    true
-            );
+            drawLine(context, deployable.name + ": " + remainingTime, x + PADDING, bodyY + count * spacing, color);
             count++;
         }
+    }
+
+    public static int mockupWidth() {
+        return hudWidth(List.of("Alert: 02m 58s", "Overflux: 56s"));
+    }
+
+    public static int mockupHeight() {
+        int lines = 2;
+        return HEADER_HEIGHT + PADDING + lines * 12 + PADDING;
+    }
+
+    private static int hudWidth(Collection<String> lines) {
+        int width = Minecraft.getInstance().font.width(Component.literal("Deployables"));
+        for (String line : lines) {
+            width = Math.max(width, Minecraft.getInstance().font.width(Component.literal(line)));
+        }
+        return width + PADDING * 2;
+    }
+
+    private static int drawPanel(GuiGraphicsExtractor context, int x, int y, int width, int height, String title) {
+        int accent = 0xFF000000 | (Settings.general.menuColor & 0xFFFFFF);
+
+        context.fill(x, y, x + width, y + height, 0xDD080808);
+        context.fill(x, y, x + width, y + HEADER_HEIGHT, 0xEE151515);
+        drawBorder(context, x, y, x + width, y + height, accent);
+        drawLine(context, title, x + PADDING, y + 6, 0xFFFFFFFF);
+        return y + HEADER_HEIGHT + 5;
+    }
+
+    private static void drawLine(GuiGraphicsExtractor context, String text, int x, int y, int color) {
+        context.text(Minecraft.getInstance().font, Component.literal(text), x, y, color, true);
+    }
+
+    private static void drawBorder(GuiGraphicsExtractor context, int left, int top, int right, int bottom, int color) {
+        context.fill(left, top, right, top + 1, color);
+        context.fill(left, bottom - 1, right, bottom, color);
+        context.fill(left, top, left + 1, bottom, color);
+        context.fill(right - 1, top, right, bottom, color);
     }
 }

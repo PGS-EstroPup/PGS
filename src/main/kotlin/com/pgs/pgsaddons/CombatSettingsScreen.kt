@@ -11,7 +11,7 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     private var maxScroll = 0.0
     private var featureScrollX = 0.0
     private var maxFeatureScrollX = 0.0
-    private var activeGroup = "Starred Mobs ESP"
+    private var activeGroup = "Combat"
     private val groups = mutableListOf<SettingsFunctionGroup>()
 
     private val panelWidth get() = ThreePaneSettingsLayout.panelWidth(width)
@@ -48,6 +48,13 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             Settings.general.starredMobEspColor = color
             Settings.save()
         }
+
+        group("Combat", listOf(
+            option("No Term Swing", toggle(Settings.general.noTerminatorSwingEnabled) { Settings.general.noTerminatorSwingEnabled = it }),
+            option("I Hate Diorite", toggle(Settings.general.iHateDioriteEnabled) { Settings.general.iHateDioriteEnabled = it }),
+            option("Arrow Tracker HUD", toggle(Settings.general.arrowTypeTrackerEnabled) { Settings.general.arrowTypeTrackerEnabled = it }),
+            option("TP Maze Tracer", toggle(Settings.general.tpMazeTracerEnabled) { Settings.general.tpMazeTracerEnabled = it })
+        ))
         group("Starred Mobs ESP", listOf(
             option("Main Toggle", toggle(Settings.general.starredMobEspEnabled) { Settings.general.starredMobEspEnabled = it }),
             option("Tracer", toggle(Settings.general.starredMobEspTracersEnabled) { Settings.general.starredMobEspTracersEnabled = it }),
@@ -63,14 +70,8 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             option("Main Toggle", toggle(Settings.general.keyHighlightEnabled) { Settings.general.keyHighlightEnabled = it }),
             option("Tracer", toggle(Settings.general.keyHighlightTracersEnabled) { Settings.general.keyHighlightTracersEnabled = it })
         ))
-        group("Combat", listOf(
-            option("No Term Swing", toggle(Settings.general.noTerminatorSwingEnabled) { Settings.general.noTerminatorSwingEnabled = it }),
-            option("I Hate Diorite", toggle(Settings.general.iHateDioriteEnabled) { Settings.general.iHateDioriteEnabled = it }),
-            option("Arrow Tracker HUD", toggle(Settings.general.arrowTypeTrackerEnabled) { Settings.general.arrowTypeTrackerEnabled = it }),
-            option("TP Maze Tracer", toggle(Settings.general.tpMazeTracerEnabled) { Settings.general.tpMazeTracerEnabled = it })
-        ))
 
-        addDrawableChild(PgsButtonWidget(width / 2 - 185, startY + panelHeight - 24, 175, 18, Text.literal("§bMove HUD")) {
+        addDrawableChild(PgsButtonWidget(width / 2 - 185, startY + panelHeight - 24, 175, 18, Text.literal("Â§bMove HUD")) {
             client?.setScreen(HudEditorScreen(this))
         })
         addDrawableChild(PgsButtonWidget(width / 2 + 10, startY + panelHeight - 24, 175, 18, Text.literal("Done")) { client?.setScreen(null) })
@@ -80,7 +81,7 @@ class CombatSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         context.fill(0, 0, width, height, 0x88000000.toInt())
     }
 
-    private fun onOff(value: Boolean): String = if (value) "§aON" else "§cOFF"
+    private fun onOff(value: Boolean): String = if (value) "Â§aON" else "Â§cOFF"
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         ThreePaneSettingsLayout.hide(groups)

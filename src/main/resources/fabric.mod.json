@@ -22,7 +22,7 @@
   "depends": {
     "minecraft": "${minecraft_dependency}",
     "fabricloader": ">=0.19.2",
-    "fabric": "${fabric_dependency}",
+    "fabric-api": "${fabric_dependency}",
     "fabric-language-kotlin": ">=1.13.0+kotlin.2.1.0"
   }
 }

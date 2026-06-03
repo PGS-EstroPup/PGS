@@ -22,7 +22,7 @@ class NotepadScreen(private val parent: Screen) : Screen(Text.empty()) {
 
     override fun init() {
         groups.clear()
-        SettingsTabs.create(SettingsTab.NOTEPAD, parent, startX, startY, panelWidth) { client?.setScreen(it) }.forEach { addDrawableChild(it) }
+        SettingsTabs.create(SettingsTab.GENERAL, parent, startX, startY, panelWidth) { client?.setScreen(it) }.forEach { addDrawableChild(it) }
 
         fun option(name: String, widget: ClickableWidget, description: String? = null): SettingsOptionRow {
             addDrawableChild(widget)
@@ -95,3 +95,6 @@ class NotepadScreen(private val parent: Screen) : Screen(Text.empty()) {
 
     override fun shouldPause(): Boolean = true
 }
+
+
+

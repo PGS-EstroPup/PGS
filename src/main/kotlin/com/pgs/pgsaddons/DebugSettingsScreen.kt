@@ -59,7 +59,7 @@ class DebugSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     }
 
     private fun onOff(value: Boolean): Text {
-        return Text.literal(if (value) "ON" else "OFF").formatted(if (value) Formatting.GREEN else Formatting.RED)
+        return Text.literal(if (value) "ON" else "OFF").withStyle(if (value) Formatting.GREEN else Formatting.RED)
     }
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
@@ -83,3 +83,7 @@ class DebugSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
 
     override fun shouldPause(): Boolean = true
 }
+
+
+
+

@@ -14,7 +14,7 @@ class PgsButtonWidget(
     width: Int,
     height: Int,
     message: Text,
-    var isActive: Boolean = false,
+    var selected: Boolean = false,
     private val onPressAction: (PgsButtonWidget) -> Unit
 ) : ClickableWidget(x, y, width, height, message) {
 
@@ -22,11 +22,11 @@ class PgsButtonWidget(
         onPressAction(this)
     }
 
-    override fun appendClickableNarrations(builder: NarrationMessageBuilder) {
-        appendDefaultNarrations(builder)
+    override fun updateWidgetNarration(builder: NarrationMessageBuilder) {
+        defaultButtonNarrationText(builder)
     }
 
-    override fun renderWidget(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+    override fun extractWidgetRenderState(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         if (!visible) return
 
         val hovered = isMouseOver(mouseX.toDouble(), mouseY.toDouble())
@@ -34,13 +34,13 @@ class PgsButtonWidget(
         val accentColor = 0xFF000000.toInt() or (Settings.general.menuColor and 0xFFFFFF)
         val accentGlow = ((if (hovered) 0x77 else 0x55) shl 24) or (Settings.general.menuColor and 0xFFFFFF)
         val bgColor = when {
-            isActive -> accentGlow
+            selected -> accentGlow
             hovered -> 0xDD242424.toInt()
             else -> 0xCC151515.toInt()
         }
         context.fill(x, y, x + width, y + height, bgColor)
 
-        val borderColor = if (hovered || isActive) accentColor else 0xFF1F1F1F.toInt()
+        val borderColor = if (hovered || selected) accentColor else 0xFF1F1F1F.toInt()
         
         // Draw custom 1px border
         context.fill(x, y, x + width, y + 1, borderColor) // Top
@@ -50,9 +50,9 @@ class PgsButtonWidget(
 
         // Text rendering - Always White
         val textColor = 0xFFFFFFFF.toInt()
-        val textWidth = MinecraftClient.getInstance().textRenderer.getWidth(this.message)
-        context.drawText(
-            MinecraftClient.getInstance().textRenderer,
+        val textWidth = MinecraftClient.getInstance().font.width(this.message)
+        context.text(
+            MinecraftClient.getInstance().font,
             this.message,
             this.x + (this.width - textWidth) / 2,
             this.y + (this.height - 9) / 2,

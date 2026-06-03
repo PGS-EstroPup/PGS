@@ -89,7 +89,7 @@ object PinglessMiningMineshaft {
                 return@register ActionResult.PASS
             }
             val blockTicks = baseTicks + Settings.general.miningTickOverride
-            val immutablePos = pos.toImmutable()
+            val immutablePos = pos.immutable()
 
             if (immutablePos !in pendingMines) {
                 pendingMines.clear()
@@ -109,7 +109,7 @@ object PinglessMiningMineshaft {
 
     private fun onClientTick(client: MinecraftClient) {
         if (pendingMines.isEmpty()) return
-        val world = client.world ?: run {
+        val world = client.level ?: run {
             PinglessMiningDebug.log("Mineshaft", "cleared pending mines because world is null")
             pendingMines.clear()
             return
@@ -172,11 +172,15 @@ object PinglessMiningMineshaft {
     }
 
     private fun isActivelyMining(client: MinecraftClient, pos: BlockPos): Boolean {
-        if (!client.options.attackKey.isPressed) return false
+        if (!client.options.keyAttack.isPressed) return false
 
         val target = client.crosshairTarget
-        if (target?.type != HitResult.Type.BLOCK) return false
+        if (target?.type != net.minecraft.world.phys.HitResult.Type.BLOCK) return false
 
         return (target as BlockHitResult).blockPos == pos
     }
 }
+
+
+
+

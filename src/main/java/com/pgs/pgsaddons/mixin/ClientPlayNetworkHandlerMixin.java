@@ -1,24 +1,17 @@
 package com.pgs.pgsaddons.mixin;
 
-import com.pgs.pgsaddons.features.TpsSync;
-import com.pgs.pgsaddons.features.TPMazeTracer;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.network.packet.s2c.play.WorldTimeUpdateS2CPacket;
+import com.pgs.pgsaddons.features.LotusWormholeDetector;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(ClientPlayNetworkHandler.class)
+@Mixin(ClientPacketListener.class)
 public abstract class ClientPlayNetworkHandlerMixin {
-   @Inject(method = "onWorldTimeUpdate", at = @At("HEAD"))
-   private void pgsAddons$onWorldTimeUpdate(WorldTimeUpdateS2CPacket packet, CallbackInfo ci) {
-      TpsSync.TICK_RATE.onWorldTimeUpdate();
-   }
-
-   @Inject(method = "onPlayerPositionLook", at = @At("HEAD"))
-   private void pgsAddons$onPlayerPositionLook(PlayerPositionLookS2CPacket packet, CallbackInfo ci) {
-      TPMazeTracer.INSTANCE.onPlayerPositionLook(packet);
-   }
+    @Inject(method = "handleParticleEvent", at = @At("HEAD"), remap = false)
+    private void pgsaddons$onParticleEvent(ClientboundLevelParticlesPacket packet, CallbackInfo ci) {
+        LotusWormholeDetector.INSTANCE.onParticlePacket(packet);
+    }
 }

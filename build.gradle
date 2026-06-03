@@ -1,26 +1,28 @@
 plugins {
-    id 'fabric-loom' version '1.14.7'
+    id 'fabric-loom' version '1.17.0-alpha.13'
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '2.1.0'
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
 }
 
 group = 'com.pgs'
 
-version = '1.0.1'
+version = '1.1.0'
 base {
     archivesName = "PGS"
 }
 
-def minecraftVersion = project.findProperty("minecraft_version") ?: "1.21.11"
+def minecraftVersion = project.findProperty("minecraft_version") ?: "26.1.2"
 def yarnMappings = project.findProperty("yarn_mappings") ?: "${minecraftVersion}+build.5"
-def fabricApiVersion = project.findProperty("fabric_api_version") ?: "0.141.4+${minecraftVersion}"
+def isMinecraft26 = minecraftVersion.startsWith("26.")
+def fabricApiVersion = project.findProperty("fabric_api_version") ?: (isMinecraft26 ? "0.150.0+26.1.2" : "0.141.4+${minecraftVersion}")
+def fabricKotlinVersion = project.findProperty("fabric_kotlin_version") ?: (isMinecraft26 ? "1.13.11+kotlin.2.3.21" : "1.13.0+kotlin.2.1.0")
 def hasMinecraftVersionOverride = project.hasProperty("minecraft_version")
 
 tasks.withType(Jar).configureEach {
     archiveVersion = "${version}+mc${minecraftVersion}"
 }
 
-tasks.named("remapJar").configure {
+tasks.matching { it.name == "remapJar" }.configureEach {
     archiveVersion = "${project.version}+mc${minecraftVersion}"
 }
 
@@ -42,7 +44,7 @@ tasks.register("buildAllMinecraftVersions") {
     dependsOn("build", "buildMinecraft12110")
 }
 
-if (!hasMinecraftVersionOverride) {
+if (!hasMinecraftVersionOverride && !isMinecraft26) {
     tasks.named("build").configure {
         finalizedBy("buildMinecraft12110")
     }
@@ -66,13 +68,17 @@ loom {
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraftVersion}"
-    mappings "net.fabricmc:yarn:${yarnMappings}:v2"
+    if (isMinecraft26) {
+        mappings files("mappings/26.1.2-identity.jar")
+    } else {
+        mappings "net.fabricmc:yarn:${yarnMappings}:v2"
+    }
 
     modImplementation "net.fabricmc:fabric-loader:0.19.2"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
 
     // Kotlin support for Fabric
-    modImplementation "net.fabricmc:fabric-language-kotlin:1.13.0+kotlin.2.1.0"
+    modImplementation "net.fabricmc:fabric-language-kotlin:${fabricKotlinVersion}"
 }
 
 processResources {
@@ -80,8 +86,8 @@ processResources {
     filesMatching("fabric.mod.json") {
         expand(
                 "version": project.version,
-                "minecraft_dependency": ">=1.21.10 <=1.21.11",
-                "fabric_dependency": ">=0.138.4"
+                "minecraft_dependency": isMinecraft26 ? ">=26.1.2 <26.2" : ">=1.21.10 <=1.21.11",
+                "fabric_dependency": isMinecraft26 ? ">=0.150.0" : ">=0.138.4"
         )
     }
 }
@@ -90,7 +96,9 @@ sourceSets {
     main {
         kotlin {
             srcDirs = ['src/main/kotlin', 'src/main/java']
-            if (minecraftVersion == "1.21.10") {
+            if (isMinecraft26) {
+                srcDir 'src/compat/26.1.2/java'
+            } else if (minecraftVersion == "1.21.10") {
                 srcDir 'src/compat/1.21.10/java'
             } else {
                 srcDir 'src/compat/1.21.11/java'
@@ -98,7 +106,9 @@ sourceSets {
         }
         java {
             srcDirs = ['src/main/java']
-            if (minecraftVersion == "1.21.10") {
+            if (isMinecraft26) {
+                srcDir 'src/compat/26.1.2/java'
+            } else if (minecraftVersion == "1.21.10") {
                 srcDir 'src/compat/1.21.10/java'
             } else {
                 srcDir 'src/compat/1.21.11/java'
@@ -108,15 +118,15 @@ sourceSets {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(isMinecraft26 ? 25 : 21)
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(isMinecraft26 ? 25 : 21)
 }
 
 tasks.withType(JavaCompile).configureEach {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = isMinecraft26 ? JavaVersion.VERSION_25 : JavaVersion.VERSION_21
+    targetCompatibility = isMinecraft26 ? JavaVersion.VERSION_25 : JavaVersion.VERSION_21
     options.encoding = 'UTF-8'
 }

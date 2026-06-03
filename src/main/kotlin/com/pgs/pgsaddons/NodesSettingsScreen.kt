@@ -78,28 +78,52 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             }
         }
 
-        fun profileButton(current: () -> String, onSelect: (String) -> Unit): PgsButtonWidget {
+        fun profileButton(current: () -> String, profiles: () -> List<String>, onSelect: (String) -> Unit): PgsButtonWidget {
             return PgsButtonWidget(0, 0, 100, 20, Text.literal(current())) { button ->
-                val next = nextProfile(current())
+                val next = nextProfile(current(), profiles())
                 onSelect(next)
                 button.setMessage(Text.literal(next))
-                client?.setScreen(NodesSettingsScreen(parent))
+                Settings.save()
             }
         }
 
         fun keybindOption(name: String, binding: KeyBinding, description: String? = null): SettingsOptionRow {
             lateinit var row: KeybindRow
-            val button = PgsButtonWidget(0, 0, 120, 20, binding.getBoundKeyLocalizedText()) {
+            val button = PgsButtonWidget(0, 0, 120, 20, binding.getTranslatedKeyMessage()) {
                 listeningRow = row
                 row.button.setMessage(Text.literal("> Press key <"))
-                row.button.isActive = true
+                row.button.selected = true
             }
             row = KeybindRow(binding, button)
             return option(name, button, description)
         }
 
+        fun nodeProfiles(): List<String> = (PROFILE_NAMES + NodeManager.profileNames() + Settings.general.nodeActiveProfile).distinct()
+        fun autoFarmProfiles(): List<String> = (PROFILE_NAMES + Settings.general.autoFarm2Profiles.keys + Settings.general.autoFarm2ActiveProfile).distinct()
+
+        lateinit var nodeProfileButton: PgsButtonWidget
+        lateinit var nodeProfileNameInput: TextFieldWidget
+        var nodeProfileNameDraft = Settings.general.nodeActiveProfile
+        nodeProfileButton = profileButton({ Settings.general.nodeActiveProfile }, ::nodeProfiles) {
+            NodeManager.switchProfile(it)
+            nodeProfileNameDraft = Settings.general.nodeActiveProfile
+            nodeProfileNameInput.text = nodeProfileNameDraft
+        }
+        nodeProfileNameInput = textInput("Profile Name", nodeProfileNameDraft) {
+            nodeProfileNameDraft = it
+        }
+        val nodeRenameButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Rename")) {
+            if (NodeManager.renameProfile(nodeProfileNameDraft)) {
+                nodeProfileNameDraft = Settings.general.nodeActiveProfile
+                nodeProfileNameInput.text = nodeProfileNameDraft
+                nodeProfileButton.setMessage(Text.literal(nodeProfileNameDraft))
+            }
+        }
+
         group("Node Placement", listOf(
-            option("Node Profile", profileButton({ Settings.general.nodeActiveProfile }) { NodeManager.switchProfile(it) }, "Switches the placed-node preset."),
+            option("Node Profile", nodeProfileButton, "Switches the placed-node preset."),
+            option("Profile Name", nodeProfileNameInput, "Name for the current placed-node preset."),
+            option("Apply Name", nodeRenameButton, "Renames the current placed-node preset."),
             keybindOption("Toggle Node Placement", DrawNodes.toggleKey, "Right click to place, Right click again to configure"),
             option("Node Render", nodeRenderModeButton(), "Controls whether placed nodes render always, only within 30 blocks, or never.")
         ))
@@ -128,26 +152,55 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             }
         }
         pestOffsetInput.setPlaceholder(Text.literal("2m 45s"))
+        lateinit var autoFarmProfileButton: PgsButtonWidget
+        lateinit var autoFarmProfileNameInput: TextFieldWidget
+        var autoFarmProfileNameDraft = Settings.general.autoFarm2ActiveProfile
+        autoFarmProfileButton = profileButton({ Settings.general.autoFarm2ActiveProfile }, ::autoFarmProfiles) {
+            Settings.switchAutoFarm2Profile(it)
+            autoFarmProfileNameDraft = Settings.general.autoFarm2ActiveProfile
+            autoFarmProfileNameInput.text = autoFarmProfileNameDraft
+        }
+        autoFarmProfileNameInput = textInput("Profile Name", autoFarmProfileNameDraft) {
+            autoFarmProfileNameDraft = it
+        }
+        val autoFarmRenameButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Rename")) {
+            if (Settings.renameAutoFarm2Profile(autoFarmProfileNameDraft)) {
+                autoFarmProfileNameDraft = Settings.general.autoFarm2ActiveProfile
+                autoFarmProfileNameInput.text = autoFarmProfileNameDraft
+                autoFarmProfileButton.setMessage(Text.literal(autoFarmProfileNameDraft))
+            }
+        }
+
         group("Auto Farm 2.0", listOf(
-            option("AutoFarm Profile", profileButton({ Settings.general.autoFarm2ActiveProfile }) { Settings.switchAutoFarm2Profile(it) }, "Switches Auto Farm slots, plot, wardrobe slots, pest offset, and action order."),
+            option("AutoFarm Profile", autoFarmProfileButton, "Switches Auto Farm slots, plot, wardrobe slots, pest offset, and action order."),
+            option("Profile Name", autoFarmProfileNameInput, "Name for the current Auto Farm profile."),
+            option("Apply Name", autoFarmRenameButton, "Renames the current Auto Farm profile."),
             option("Main Toggle", toggle(Settings.general.autoFarm2Enabled) {
                 if (it != Settings.general.autoFarm2Enabled) AutoFarm2.toggle()
             }, "Starts or pauses Auto Farm 2.0. Restarting continues from the last unfinished action unless Stop Action reset it."),
             option("Edit Order", PgsButtonWidget(0, 0, 100, 20, Text.literal("Edit Order")) {
                 client?.setScreen(AutoFarmOrderScreen(this))
             }, "Opens the action order editor for C1, C2, and C3."),
+            option("Reset Cycle", PgsButtonWidget(0, 0, 100, 20, Text.literal("Reset C1")) {
+                AutoFarm2.resetToCycle1()
+            }, "Resets Auto Farm progress back to Cycle 1."),
             keybindOption("Start / Stop", AutoFarm2.toggleKey),
             option("Pest Tracker HUD", toggle(Settings.general.pestTimersEnabled) { Settings.general.pestTimersEnabled = it }, "Shows garden pest timer lines and drives the C2 start timing."),
             option("Hoe Slot", slotSlider(Settings.general.autoFarm2HoeSlot) { Settings.general.autoFarm2HoeSlot = it }, "Hotbar slot selected by the Hold Hoe action."),
             option("Mousemat Slot", slotSlider(Settings.general.autoFarm2MousematSlot) { Settings.general.autoFarm2MousematSlot = it }, "Hotbar slot used by the Use Mousemat action."),
             option("Rod Slot", slotSlider(Settings.general.autoFarm2RodSlot) { Settings.general.autoFarm2RodSlot = it }, "Hotbar slot used by the Use Rod action."),
             option("Vacuum Slot", slotSlider(Settings.general.autoFarm2VacuumSlot) { Settings.general.autoFarm2VacuumSlot = it }, "Hotbar slot used by Tracking Vacuum and Vacuum Interact actions."),
+            option("Spray Slot", slotSlider(Settings.general.autoFarm2SpraySlot) { Settings.general.autoFarm2SpraySlot = it }, "Hotbar slot used by Auto Spray when Spray is None."),
             option("Pest Offset", pestOffsetInput, "Subtracts this time from the pest cooldown. C2 starts when the adjusted countdown reaches zero."),
             option("Plot Name", plotInput, "Plot name used by the TP To Plot action."),
             option("Armor Slot 1", armor1Slider, "Wardrobe slot used by the Armor Slot 1 action."),
             option("Armor Slot 2", armor2Slider, "Wardrobe slot used by the Armor Slot 2 action."),
             option("Armor Slot 3", armor3Slider, "Wardrobe slot used by the Armor Slot 3 action.")
         ))
+
+        addDrawableChild(PgsButtonWidget(width / 2 - 185, startY + panelHeight - 24, 175, 18, Text.literal("§bMove HUD")) {
+            client?.setScreen(HudEditorScreen(this))
+        })
 
         addDrawableChild(PgsButtonWidget(width / 2 + 10, startY + panelHeight - 24, 175, 18, Text.literal("Done")) {
             client?.setScreen(null)
@@ -178,9 +231,10 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
 
     private fun onOff(value: Boolean): String = if (value) "§aON" else "§cOFF"
 
-    private fun nextProfile(current: String): String {
-        val index = PROFILE_NAMES.indexOf(current).takeIf { it >= 0 } ?: 0
-        return PROFILE_NAMES[(index + 1) % PROFILE_NAMES.size]
+    private fun nextProfile(current: String, profiles: List<String>): String {
+        val availableProfiles = profiles.ifEmpty { PROFILE_NAMES }
+        val index = availableProfiles.indexOf(current).takeIf { it >= 0 } ?: 0
+        return availableProfiles[(index + 1) % availableProfiles.size]
     }
 
     override fun renderBackground(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
@@ -209,7 +263,7 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     override fun keyPressed(input: KeyInput): Boolean {
         val row = listeningRow
         if (row != null) {
-            val key = if (input.key() == GLFW.GLFW_KEY_ESCAPE) InputUtil.UNKNOWN_KEY else InputUtil.fromKeyCode(input)
+            val key = if (input.key() == GLFW.GLFW_KEY_ESCAPE) InputUtil.UNKNOWN else InputUtil.getKey(input)
             setBinding(row, key)
             return true
         }
@@ -219,19 +273,19 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     override fun mouseClicked(click: Click, doubled: Boolean): Boolean {
         val row = listeningRow
         if (row != null) {
-            setBinding(row, InputUtil.Type.MOUSE.createFromCode(click.button()))
+            setBinding(row, com.mojang.blaze3d.platform.InputConstants.Type.MOUSE.getOrCreate(click.button()))
             return true
         }
         return super.mouseClicked(click, doubled)
     }
 
-    private fun setBinding(row: KeybindRow, key: InputUtil.Key) {
-        row.binding.setBoundKey(key)
-        KeyBinding.updateKeysByCode()
-        client?.options?.write()
+    private fun setBinding(row: KeybindRow, key: com.mojang.blaze3d.platform.InputConstants.Key) {
+        row.binding.setKey(key)
+        KeyBinding.resetMapping()
+        client?.options?.save()
         listeningRow = null
-        row.button.isActive = false
-        row.button.setMessage(row.binding.getBoundKeyLocalizedText())
+        row.button.selected = false
+        row.button.setMessage(row.binding.getTranslatedKeyMessage())
     }
 
     override fun shouldPause(): Boolean = true
@@ -261,3 +315,9 @@ class NodesSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
         private val PROFILE_NAMES = listOf("Default", "Profile 2", "Profile 3", "Profile 4", "Profile 5")
     }
 }
+
+
+
+
+
+

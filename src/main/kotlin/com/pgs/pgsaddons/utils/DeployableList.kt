@@ -31,7 +31,11 @@ object DeployableList {
                 arrayOf(intArrayOf(40,180))
             ),
             arrayOf(
-                arrayOf("Umbrella","Lantern","Will-o'-wisp","Totem of Corruption"),
+                arrayOf("Umbrella","Deployable Umbrella"),
+                arrayOf(intArrayOf(20,180))
+            ),
+            arrayOf(
+                arrayOf("Lantern","Will-o'-wisp","Totem of Corruption"),
                 arrayOf(intArrayOf(30,300))
             ),
             arrayOf(

@@ -4,9 +4,12 @@ import com.pgs.pgsaddons.Settings
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents
+import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.Click
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
 import net.minecraft.client.input.CharInput
 import net.minecraft.client.input.KeyInput
 import net.minecraft.client.option.KeyBinding
@@ -24,31 +27,49 @@ object NotepadOverlay {
     private var focused = false
     private var dragging = false
     private var resizing = false
+    private var selecting = false
     private var dragOffsetX = 0.0
     private var dragOffsetY = 0.0
     private var cursor = 0
+    private var selectionAnchor: Int? = null
+    private var scrollLine = 0
 
     @JvmStatic
     fun init() {
         toggleKey = KeyBindingHelper.registerKeyBinding(
             KeyBinding(
                 "PGS Toggle Notepad",
-                InputUtil.Type.KEYSYM,
+                com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_UNKNOWN,
-                KeyBinding.Category.MISC
+                net.minecraft.client.KeyMapping.Category.MISC
             )
         )
 
         ClientTickEvents.END_CLIENT_TICK.register {
-            while (toggleKey.wasPressed()) {
+            while (toggleKey.consumeClick()) {
                 Settings.general.notepadRenderMode = if (Settings.general.notepadRenderMode == RENDER_OFF) RENDER_EVERYWHERE else RENDER_OFF
                 if (Settings.general.notepadRenderMode == RENDER_OFF) focused = false
                 Settings.save()
             }
         }
 
-        HudElementRegistry.addLast(Identifier.of("pgs_addons", "notepad")) { context, _ ->
-            if (mc.currentScreen == null && shouldRenderInHud()) render(context, -1, -1, 0f)
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("pgs_addons", "notepad")) { context, _ ->
+            if (mc.screen == null && shouldRenderInHud()) render(context, -1, -1, 0f)
+        }
+
+        ScreenEvents.AFTER_INIT.register { _, screen, _, _ ->
+            ScreenMouseEvents.allowMouseClick(screen).register { _, click ->
+                !mouseClicked(click, false)
+            }
+            ScreenMouseEvents.allowMouseDrag(screen).register { _, click, offsetX, offsetY ->
+                !mouseDragged(click, offsetX, offsetY)
+            }
+            ScreenMouseEvents.allowMouseRelease(screen).register { _, click ->
+                !mouseReleased(click)
+            }
+            ScreenMouseEvents.allowMouseScroll(screen).register { _, mouseX, mouseY, _, verticalAmount ->
+                !mouseScrolled(mouseX, mouseY, verticalAmount)
+            }
         }
     }
 
@@ -92,18 +113,32 @@ object NotepadOverlay {
             return true
         }
 
-        cursor = cursorFromMouse(mx, my)
+        val newCursor = cursorFromMouse(mx, my)
+        if (GLFW.glfwGetKey(mc.window.handle(), GLFW.GLFW_KEY_LEFT_SHIFT) == GLFW.GLFW_PRESS ||
+            GLFW.glfwGetKey(mc.window.handle(), GLFW.GLFW_KEY_RIGHT_SHIFT) == GLFW.GLFW_PRESS) {
+            if (selectionAnchor == null) selectionAnchor = cursor
+        } else {
+            selectionAnchor = null
+        }
+        cursor = newCursor
+        selecting = true
         return true
     }
 
     @JvmStatic
     fun mouseDragged(click: Click, offsetX: Double, offsetY: Double): Boolean {
-        if (!shouldRenderOnScreen() || (!dragging && !resizing)) return false
+        if (!shouldRenderOnScreen() || (!dragging && !resizing && !selecting)) return false
 
         if (dragging) {
             Settings.general.notepadX = (click.x() - dragOffsetX).toInt().coerceAtLeast(0)
             Settings.general.notepadY = (click.y() - dragOffsetY).toInt().coerceAtLeast(0)
             Settings.save()
+            return true
+        }
+
+        if (selecting) {
+            if (selectionAnchor == null) selectionAnchor = cursor
+            cursor = cursorFromMouse(click.x(), click.y())
             return true
         }
 
@@ -120,29 +155,80 @@ object NotepadOverlay {
         val handled = dragging || resizing
         dragging = false
         resizing = false
+        selecting = false
         return handled
+    }
+
+    @JvmStatic
+    fun mouseScrolled(mouseX: Double, mouseY: Double, verticalAmount: Double): Boolean {
+        if (!shouldRenderOnScreen()) return false
+        val x = Settings.general.notepadX
+        val y = Settings.general.notepadY
+        val w = Settings.general.notepadWidth
+        val h = Settings.general.notepadHeight
+        if (!contains(mouseX, mouseY, x, y, w, h)) return false
+
+        val visibleLines = visibleLineCount()
+        val maxScroll = (visualLines().size - visibleLines).coerceAtLeast(0)
+        scrollLine = (scrollLine - verticalAmount.toInt()).coerceIn(0, maxScroll)
+        return true
     }
 
     @JvmStatic
     fun keyPressed(input: KeyInput): Boolean {
         if (!shouldRenderOnScreen() || !focused) return false
+        val ctrl = input.modifiers() and GLFW.GLFW_MOD_CONTROL != 0 || input.modifiers() and GLFW.GLFW_MOD_SUPER != 0
+        val shift = input.modifiers() and GLFW.GLFW_MOD_SHIFT != 0
+
+        if (ctrl) {
+            return when (input.key()) {
+                GLFW.GLFW_KEY_A -> {
+                    selectionAnchor = 0
+                    cursor = Settings.general.notepadText.length
+                    ensureCursorVisible()
+                    true
+                }
+                GLFW.GLFW_KEY_C -> {
+                    selectedText()?.let { mc.keyboardHandler.setClipboard(it) }
+                    true
+                }
+                GLFW.GLFW_KEY_X -> {
+                    selectedText()?.let {
+                        mc.keyboardHandler.setClipboard(it)
+                        replaceSelection("")
+                    }
+                    true
+                }
+                GLFW.GLFW_KEY_V -> {
+                    insertText(mc.keyboardHandler.getClipboard())
+                    true
+                }
+                else -> true
+            }
+        }
 
         return when (input.key()) {
             GLFW.GLFW_KEY_BACKSPACE -> {
-                if (cursor > 0) {
+                if (hasSelection()) {
+                    replaceSelection("")
+                } else if (cursor > 0) {
                     val text = Settings.general.notepadText
                     Settings.general.notepadText = text.removeRange(cursor - 1, cursor)
                     cursor--
                     Settings.save()
                 }
+                ensureCursorVisible()
                 true
             }
             GLFW.GLFW_KEY_DELETE -> {
                 val text = Settings.general.notepadText
-                if (cursor < text.length) {
+                if (hasSelection()) {
+                    replaceSelection("")
+                } else if (cursor < text.length) {
                     Settings.general.notepadText = text.removeRange(cursor, cursor + 1)
                     Settings.save()
                 }
+                ensureCursorVisible()
                 true
             }
             GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
@@ -150,34 +236,42 @@ object NotepadOverlay {
                 true
             }
             GLFW.GLFW_KEY_LEFT -> {
-                cursor = (cursor - 1).coerceAtLeast(0)
+                moveCursor((cursor - 1).coerceAtLeast(0), shift)
                 true
             }
             GLFW.GLFW_KEY_RIGHT -> {
-                cursor = (cursor + 1).coerceAtMost(Settings.general.notepadText.length)
+                moveCursor((cursor + 1).coerceAtMost(Settings.general.notepadText.length), shift)
+                true
+            }
+            GLFW.GLFW_KEY_UP -> {
+                moveCursor(cursorVertical(-1), shift)
+                true
+            }
+            GLFW.GLFW_KEY_DOWN -> {
+                moveCursor(cursorVertical(1), shift)
                 true
             }
             GLFW.GLFW_KEY_HOME -> {
-                cursor = lineStart(cursor)
+                moveCursor(visualLineStart(cursor), shift)
                 true
             }
             GLFW.GLFW_KEY_END -> {
-                cursor = lineEnd(cursor)
+                moveCursor(visualLineEnd(cursor), shift)
                 true
             }
             GLFW.GLFW_KEY_ESCAPE -> {
                 focused = false
                 false
             }
-            else -> false
+            else -> true
         }
     }
 
     @JvmStatic
     fun charTyped(input: CharInput): Boolean {
-        if (!shouldRenderOnScreen() || !focused || !input.isValidChar) return false
+        if (!shouldRenderOnScreen() || !focused || !input.isAllowedChatCharacter()) return false
 
-        insertText(input.asString())
+        insertText(input.codepointAsString())
         return true
     }
 
@@ -191,7 +285,7 @@ object NotepadOverlay {
         context.fill(x, y, x + w, y + h, 0xDD080808.toInt())
         context.fill(x, y, x + w, y + HEADER_HEIGHT, 0xEE151515.toInt())
         drawBorder(context, x, y, x + w, y + h, accent)
-        context.drawText(mc.textRenderer, Text.literal("Notepad"), x + 6, y + 6, 0xFFFFFFFF.toInt(), true)
+        context.drawText(mc.font, Text.literal("Notepad"), x + 6, y + 6, 0xFFFFFFFF.toInt(), true)
 
         val bodyLeft = x + PADDING
         val bodyTop = y + HEADER_HEIGHT + 5
@@ -212,8 +306,12 @@ object NotepadOverlay {
 
     private fun drawText(context: DrawContext, left: Int, top: Int, maxWidth: Int) {
         var y = top
-        for (line in visualLines()) {
-            context.drawText(mc.textRenderer, line.text.ifEmpty { " " }, left, y, 0xFFECECEC.toInt(), true)
+        val lines = visualLines()
+        val visibleLines = visibleLineCount()
+        scrollLine = scrollLine.coerceIn(0, (lines.size - visibleLines).coerceAtLeast(0))
+        for (line in lines.drop(scrollLine).take(visibleLines)) {
+            drawSelection(context, line, left, y)
+            context.drawText(mc.font, line.text.ifEmpty { " " }, left, y, 0xFFECECEC.toInt(), true)
             y += LINE_HEIGHT
             if (y > Settings.general.notepadY + Settings.general.notepadHeight) break
         }
@@ -221,26 +319,34 @@ object NotepadOverlay {
 
     private fun drawCursor(context: DrawContext, left: Int, top: Int) {
         val cursorPoint = cursorPoint()
-        val cursorX = left + mc.textRenderer.getWidth(cursorPoint.textBeforeCursor)
-        val cursorY = top + cursorPoint.lineIndex * LINE_HEIGHT
+        val cursorX = left + mc.font .width(cursorPoint.textBeforeCursor)
+        val cursorY = top + (cursorPoint.lineIndex - scrollLine) * LINE_HEIGHT
+        if (cursorY < top || cursorY > Settings.general.notepadY + Settings.general.notepadHeight - PADDING) return
         context.fill(cursorX, cursorY, cursorX + 1, cursorY + 10, 0xFFFFFFFF.toInt())
     }
 
     private fun insertText(value: String) {
+        if (value.isEmpty()) return
+        if (hasSelection()) {
+            replaceSelection(value)
+            return
+        }
         val text = Settings.general.notepadText
         Settings.general.notepadText = text.substring(0, cursor) + value + text.substring(cursor)
         cursor += value.length
+        selectionAnchor = null
+        ensureCursorVisible()
         Settings.save()
     }
 
     private fun cursorFromMouse(mouseX: Double, mouseY: Double): Int {
         val lines = visualLines()
-        val lineIndex = ((mouseY.toInt() - Settings.general.notepadY - HEADER_HEIGHT - 5) / LINE_HEIGHT).coerceIn(0, max(0, lines.size - 1))
+        val lineIndex = (scrollLine + ((mouseY.toInt() - Settings.general.notepadY - HEADER_HEIGHT - 5) / LINE_HEIGHT)).coerceIn(0, max(0, lines.size - 1))
         val line = lines.getOrElse(lineIndex) { VisualLine("", Settings.general.notepadText.length) }
         var best = 0
         var bestDistance = Int.MAX_VALUE
         for (i in 0..line.text.length) {
-            val px = Settings.general.notepadX + PADDING + mc.textRenderer.getWidth(line.text.substring(0, i))
+            val px = Settings.general.notepadX + PADDING + mc.font .width(line.text.substring(0, i))
             val distance = kotlin.math.abs(px - mouseX.toInt())
             if (distance < bestDistance) {
                 bestDistance = distance
@@ -268,12 +374,130 @@ object NotepadOverlay {
 
         val lines = mutableListOf<VisualLine>()
         var start = 0
-        text.split('\n').forEachIndexed { index, line ->
-            lines.add(VisualLine(line, start))
-            start += line.length
-            if (index < text.count { it == '\n' }) start++
+        val maxWidth = (Settings.general.notepadWidth - PADDING * 2).coerceAtLeast(20)
+        text.split('\n').forEachIndexed { index, paragraph ->
+            addWrappedLines(paragraph, start, maxWidth, lines)
+            start += paragraph.length
+            if (index < text.count { it == '\n' }) {
+                if (paragraph.isEmpty()) lines.add(VisualLine("", start))
+                start++
+            }
         }
         return lines
+    }
+
+    private fun addWrappedLines(paragraph: String, paragraphStart: Int, maxWidth: Int, out: MutableList<VisualLine>) {
+        if (paragraph.isEmpty()) {
+            out.add(VisualLine("", paragraphStart))
+            return
+        }
+
+        var lineStart = 0
+        while (lineStart < paragraph.length) {
+            var bestEnd = lineStart + 1
+            var lastBreak = -1
+            var i = lineStart + 1
+            while (i <= paragraph.length) {
+                val candidate = paragraph.substring(lineStart, i)
+                if (mc.font.width(candidate) > maxWidth) break
+                bestEnd = i
+                if (i < paragraph.length && paragraph[i].isWhitespace()) lastBreak = i + 1
+                i++
+            }
+
+            val end = if (bestEnd < paragraph.length && lastBreak > lineStart) lastBreak else bestEnd
+            out.add(VisualLine(paragraph.substring(lineStart, end).trimEnd(), paragraphStart + lineStart))
+            lineStart = end
+        }
+    }
+
+    private fun drawSelection(context: DrawContext, line: VisualLine, left: Int, y: Int) {
+        val range = selectionRange() ?: return
+        val lineStart = line.startIndex
+        val lineEnd = line.startIndex + line.text.length
+        val start = range.first.coerceIn(lineStart, lineEnd)
+        val end = range.second.coerceIn(lineStart, lineEnd)
+        if (start >= end) return
+
+        val x1 = left + mc.font.width(line.text.substring(0, start - lineStart))
+        val x2 = left + mc.font.width(line.text.substring(0, end - lineStart))
+        context.fill(x1, y, x2.coerceAtLeast(x1 + 1), y + LINE_HEIGHT, 0x885A8DEE.toInt())
+    }
+
+    private fun moveCursor(newCursor: Int, keepSelection: Boolean) {
+        if (keepSelection) {
+            if (selectionAnchor == null) selectionAnchor = cursor
+        } else {
+            selectionAnchor = null
+        }
+        cursor = newCursor.coerceIn(0, Settings.general.notepadText.length)
+        ensureCursorVisible()
+    }
+
+    private fun cursorVertical(delta: Int): Int {
+        val point = cursorPoint()
+        val lines = visualLines()
+        val targetIndex = (point.lineIndex + delta).coerceIn(0, lines.lastIndex.coerceAtLeast(0))
+        val targetLine = lines.getOrElse(targetIndex) { return cursor }
+        val currentX = mc.font.width(point.textBeforeCursor)
+        var best = 0
+        var bestDistance = Int.MAX_VALUE
+        for (i in 0..targetLine.text.length) {
+            val distance = kotlin.math.abs(mc.font.width(targetLine.text.substring(0, i)) - currentX)
+            if (distance < bestDistance) {
+                bestDistance = distance
+                best = i
+            }
+        }
+        return (targetLine.startIndex + best).coerceIn(0, Settings.general.notepadText.length)
+    }
+
+    private fun visualLineStart(index: Int): Int {
+        val line = visualLines().firstOrNull { index in it.startIndex..(it.startIndex + it.text.length) }
+        return line?.startIndex ?: lineStart(index)
+    }
+
+    private fun visualLineEnd(index: Int): Int {
+        val line = visualLines().firstOrNull { index in it.startIndex..(it.startIndex + it.text.length) }
+        return line?.let { it.startIndex + it.text.length } ?: lineEnd(index)
+    }
+
+    private fun selectedText(): String? {
+        val range = selectionRange() ?: return null
+        return Settings.general.notepadText.substring(range.first, range.second)
+    }
+
+    private fun replaceSelection(value: String) {
+        val range = selectionRange() ?: return
+        val text = Settings.general.notepadText
+        Settings.general.notepadText = text.substring(0, range.first) + value + text.substring(range.second)
+        cursor = range.first + value.length
+        selectionAnchor = null
+        ensureCursorVisible()
+        Settings.save()
+    }
+
+    private fun hasSelection(): Boolean = selectionRange() != null
+
+    private fun selectionRange(): Pair<Int, Int>? {
+        val anchor = selectionAnchor ?: return null
+        if (anchor == cursor) return null
+        val start = min(anchor, cursor).coerceIn(0, Settings.general.notepadText.length)
+        val end = max(anchor, cursor).coerceIn(0, Settings.general.notepadText.length)
+        return start to end
+    }
+
+    private fun visibleLineCount(): Int {
+        return ((Settings.general.notepadHeight - HEADER_HEIGHT - PADDING - 5) / LINE_HEIGHT).coerceAtLeast(1)
+    }
+
+    private fun ensureCursorVisible() {
+        cursor = cursor.coerceIn(0, Settings.general.notepadText.length)
+        val lineIndex = cursorPoint().lineIndex
+        val visible = visibleLineCount()
+        if (lineIndex < scrollLine) scrollLine = lineIndex
+        if (lineIndex >= scrollLine + visible) scrollLine = lineIndex - visible + 1
+        scrollLine = scrollLine.coerceAtLeast(0)
     }
 
     private fun lineStart(index: Int): Int {
@@ -301,7 +525,7 @@ object NotepadOverlay {
 
     private fun shouldRenderInHud(): Boolean {
         return when (Settings.general.notepadRenderMode) {
-            RENDER_WORLD -> mc.world != null
+            RENDER_WORLD -> mc.level != null
             RENDER_EVERYWHERE -> true
             else -> false
         }
@@ -309,7 +533,7 @@ object NotepadOverlay {
 
     private fun shouldRenderOnScreen(): Boolean {
         return when (Settings.general.notepadRenderMode) {
-            RENDER_WORLD -> mc.world != null
+            RENDER_WORLD -> mc.level != null
             RENDER_EVERYWHERE -> true
             else -> false
         }
@@ -327,3 +551,8 @@ object NotepadOverlay {
     private const val RENDER_WORLD = 1
     private const val RENDER_EVERYWHERE = 2
 }
+
+
+
+
+

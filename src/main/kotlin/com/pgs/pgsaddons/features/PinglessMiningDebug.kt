@@ -14,7 +14,7 @@ object PinglessMiningDebug {
         if (!Settings.general.pinglessMiningDebugEnabled) return
 
         val now = System.currentTimeMillis()
-        val key = "$feature|$reason|${pos?.toShortString()}|${block?.translationKey}"
+        val key = "$feature|$reason|${pos?.toShortString()}|${block?.descriptionId}"
         val last = lastMessages[key] ?: 0L
         if (now - last < MESSAGE_COOLDOWN_MS) return
         lastMessages[key] = now
@@ -30,15 +30,17 @@ object PinglessMiningDebug {
             }
             if (block != null) {
                 append(" block=")
-                append(block.translationKey.removePrefix("block.minecraft."))
+                append(block.descriptionId.removePrefix("block.minecraft."))
             }
         }
 
         System.out.println("[pgs_addons] $details")
-        MinecraftClient.getInstance().player?.sendMessage(Text.literal("§7$details"), false)
+        MinecraftClient.getInstance().player?.sendSystemMessage(Text.literal("§7$details"))
     }
 
     fun clear() {
         lastMessages.clear()
     }
 }
+
+

@@ -1,136 +1,147 @@
 package com.pgs.pgsaddons.render;
 
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.Camera;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import org.joml.Matrix4f;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.Camera;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3fc;
 
-/**
- * Draws wireframe and filled boxes for ESP.
- * Ported from Odin's PrimitiveRenderer to Java.
- */
 public final class EspRenderer {
-
-    // Edge pairs: each pair of indices defines one line of the wireframe.
-    // 8 corners × 12 edges = 24 indices
-    private static final int[] EDGES = {
-            0, 1, 1, 5, 5, 4, 4, 0, // bottom face
-            3, 2, 2, 6, 6, 7, 7, 3, // top face
-            0, 3, 1, 2, 5, 6, 4, 7 // vertical edges
+    private static final int[][] BOX_EDGES = {
+            {0, 0, 0, 1, 0, 0},
+            {1, 0, 0, 1, 0, 1},
+            {1, 0, 1, 0, 0, 1},
+            {0, 0, 1, 0, 0, 0},
+            {0, 1, 0, 1, 1, 0},
+            {1, 1, 0, 1, 1, 1},
+            {1, 1, 1, 0, 1, 1},
+            {0, 1, 1, 0, 1, 0},
+            {0, 0, 0, 0, 1, 0},
+            {1, 0, 0, 1, 1, 0},
+            {1, 0, 1, 1, 1, 1},
+            {0, 0, 1, 0, 1, 1}
     };
 
-    /**
-     * Draws a wireframe box into the given vertex consumer.
-     */
-    public static void drawWireframeBox(MatrixStack.Entry pose, VertexConsumer buffer, Box aabb, float r, float g,
+    public static void drawWireframeBox(PoseStack.Pose pose, VertexConsumer buffer, AABB aabb, float r, float g,
             float b, float a) {
+        int color = color(r, g, b, a);
         float x0 = (float) aabb.minX;
-        float y0 = (float) aabb.minY;
-        float z0 = (float) aabb.minZ;
         float x1 = (float) aabb.maxX;
+        float y0 = (float) aabb.minY;
         float y1 = (float) aabb.maxY;
+        float z0 = (float) aabb.minZ;
         float z1 = (float) aabb.maxZ;
 
-        float[] corners = {
-                x0, y0, z0, // 0
-                x1, y0, z0, // 1
-                x1, y1, z0, // 2
-                x0, y1, z0, // 3
-                x0, y0, z1, // 4
-                x1, y0, z1, // 5
-                x1, y1, z1, // 6
-                x0, y1, z1 // 7
-        };
-
-        for (int i = 0; i < EDGES.length; i += 2) {
-            int i0 = EDGES[i] * 3;
-            int i1 = EDGES[i + 1] * 3;
-
-            float cx0 = corners[i0], cy0 = corners[i0 + 1], cz0 = corners[i0 + 2];
-            float cx1 = corners[i1], cy1 = corners[i1 + 1], cz1 = corners[i1 + 2];
-
-            float dx = cx1 - cx0;
-            float dy = cy1 - cy0;
-            float dz = cz1 - cz0;
-
-            buffer.vertex(pose, cx0, cy0, cz0).color(r, g, b, a).normal(pose, dx, dy, dz);
-            buffer.vertex(pose, cx1, cy1, cz1).color(r, g, b, a).normal(pose, dx, dy, dz);
+        for (int[] edge : BOX_EDGES) {
+            drawLine(
+                    pose,
+                    buffer,
+                    edge[0] == 0 ? x0 : x1,
+                    edge[1] == 0 ? y0 : y1,
+                    edge[2] == 0 ? z0 : z1,
+                    edge[3] == 0 ? x0 : x1,
+                    edge[4] == 0 ? y0 : y1,
+                    edge[5] == 0 ? z0 : z1,
+                    2.0F,
+                    color
+            );
         }
     }
 
-    /**
-     * Draws a single line into the given vertex consumer.
-     */
-    public static void drawLine(MatrixStack.Entry pose, VertexConsumer buffer, Vec3d from, Vec3d to, float r, float g,
+    public static void drawLine(PoseStack.Pose pose, VertexConsumer buffer, Vec3 from, Vec3 to, float r, float g,
             float b, float a) {
-        float x0 = (float) from.x;
-        float y0 = (float) from.y;
-        float z0 = (float) from.z;
-        float x1 = (float) to.x;
-        float y1 = (float) to.y;
-        float z1 = (float) to.z;
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        float dz = z1 - z0;
-
-        buffer.vertex(pose, x0, y0, z0).color(r, g, b, a).normal(pose, dx, dy, dz);
-        buffer.vertex(pose, x1, y1, z1).color(r, g, b, a).normal(pose, dx, dy, dz);
+        drawLine(pose, buffer, (float) from.x, (float) from.y, (float) from.z, (float) to.x, (float) to.y,
+                (float) to.z, 2.0F, color(r, g, b, a));
     }
 
-    public static void drawTracer(MatrixStack.Entry pose, VertexConsumer buffer, Camera camera, Vec3d target, float r,
+    public static void drawLine(PoseStack.Pose pose, VertexConsumer buffer, Vec3 from, Vec3 to, float width, float r,
             float g, float b, float a) {
-        Vec3d cursor = camera.getCameraPos()
-                .add(Vec3d.fromPolar(camera.getPitch(), camera.getYaw()).multiply(0.25));
-        drawLine(pose, buffer, target, cursor, r, g, b, a);
+        drawLine(pose, buffer, (float) from.x, (float) from.y, (float) from.z, (float) to.x, (float) to.y,
+                (float) to.z, width, color(r, g, b, a));
     }
 
-    /**
-     * Draws a filled box using triangle strip into the given vertex consumer.
-     */
-    public static void drawFilledBox(MatrixStack.Entry pose, VertexConsumer buffer, Box aabb, float r, float g, float b,
+    public static void drawTracer(PoseStack.Pose pose, VertexConsumer buffer, Camera camera, Vec3 target, float r,
+            float g, float b, float a) {
+        Vec3 from = crosshairWorldPoint(camera);
+        drawLine(pose, buffer, from, target, r, g, b, a);
+    }
+
+    private static Vec3 crosshairWorldPoint(Camera camera) {
+        Vec3 position = camera.position();
+        Vector3fc forward = camera.forwardVector();
+        return position.add(forward.x() * 0.5, forward.y() * 0.5, forward.z() * 0.5);
+    }
+
+    public static void drawFilledBox(PoseStack.Pose pose, VertexConsumer buffer, AABB aabb, float r, float g, float b,
             float a) {
-        Matrix4f matrix = pose.getPositionMatrix();
-        float minX = (float) aabb.minX, minY = (float) aabb.minY, minZ = (float) aabb.minZ;
-        float maxX = (float) aabb.maxX, maxY = (float) aabb.maxY, maxZ = (float) aabb.maxZ;
+        int color = color(r, g, b, a);
+        float x1 = (float) aabb.minX;
+        float x2 = (float) aabb.maxX;
+        float y1 = (float) aabb.minY;
+        float y2 = (float) aabb.maxY;
+        float z1 = (float) aabb.minZ;
+        float z2 = (float) aabb.maxZ;
 
-        // Triangle strip vertices (same order as Odin's addChainedFilledBoxVertices)
-        vertex(buffer, matrix, r, g, b, a, minX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, minY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, minX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, minZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, maxZ);
-        vertex(buffer, matrix, r, g, b, a, maxX, maxY, maxZ);
+        vertex(buffer, pose, x1, y1, z1, color);
+        vertex(buffer, pose, x1, y1, z2, color);
+        vertex(buffer, pose, x1, y2, z2, color);
+        vertex(buffer, pose, x1, y2, z1, color);
+
+        vertex(buffer, pose, x2, y1, z2, color);
+        vertex(buffer, pose, x2, y1, z1, color);
+        vertex(buffer, pose, x2, y2, z1, color);
+        vertex(buffer, pose, x2, y2, z2, color);
+
+        vertex(buffer, pose, x1, y1, z1, color);
+        vertex(buffer, pose, x1, y2, z1, color);
+        vertex(buffer, pose, x2, y2, z1, color);
+        vertex(buffer, pose, x2, y1, z1, color);
+
+        vertex(buffer, pose, x2, y1, z2, color);
+        vertex(buffer, pose, x2, y2, z2, color);
+        vertex(buffer, pose, x1, y2, z2, color);
+        vertex(buffer, pose, x1, y1, z2, color);
+
+        vertex(buffer, pose, x1, y1, z1, color);
+        vertex(buffer, pose, x2, y1, z1, color);
+        vertex(buffer, pose, x2, y1, z2, color);
+        vertex(buffer, pose, x1, y1, z2, color);
+
+        vertex(buffer, pose, x1, y2, z2, color);
+        vertex(buffer, pose, x2, y2, z2, color);
+        vertex(buffer, pose, x2, y2, z1, color);
+        vertex(buffer, pose, x1, y2, z1, color);
     }
 
-    private static void vertex(VertexConsumer buffer, Matrix4f matrix, float r, float g, float b, float a, float x,
-            float y, float z) {
-        buffer.vertex(matrix, x, y, z).color(r, g, b, a);
+    private static void drawLine(PoseStack.Pose pose, VertexConsumer buffer, float x1, float y1, float z1, float x2,
+            float y2, float z2, float width, int color) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float length = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        float nx = length > 0.0F ? dx / length : 0.0F;
+        float ny = length > 0.0F ? dy / length : 0.0F;
+        float nz = length > 0.0F ? dz / length : 0.0F;
+
+        buffer.addVertex(pose, x1, y1, z1).setColor(color).setNormal(pose, nx, ny, nz).setLineWidth(width);
+        buffer.addVertex(pose, x2, y2, z2).setColor(color).setNormal(pose, nx, ny, nz).setLineWidth(width);
+    }
+
+    private static void vertex(VertexConsumer buffer, PoseStack.Pose pose, float x, float y, float z, int color) {
+        buffer.addVertex(pose, x, y, z).setColor(color);
+    }
+
+    private static int color(float r, float g, float b, float a) {
+        int alpha = clamp255(a);
+        int red = clamp255(r);
+        int green = clamp255(g);
+        int blue = clamp255(b);
+        return alpha << 24 | red << 16 | green << 8 | blue;
+    }
+
+    private static int clamp255(float value) {
+        return Math.max(0, Math.min(255, Math.round(value * 255.0F)));
     }
 
     private EspRenderer() {

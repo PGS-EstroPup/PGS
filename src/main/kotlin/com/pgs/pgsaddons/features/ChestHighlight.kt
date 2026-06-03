@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents
 import net.minecraft.block.Blocks
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
 import net.minecraft.text.Text
 import net.minecraft.util.Identifier
 import net.minecraft.util.math.BlockPos
@@ -47,7 +48,7 @@ object ChestHighlight {
         }
 
         HudElementRegistry.addLast(
-            Identifier.of("pgs_addons", "powder_chest_hud")
+            Identifier.fromNamespaceAndPath("pgs_addons", "powder_chest_hud")
         ) { context, _ ->
             onRenderHud(context)
         }
@@ -60,7 +61,7 @@ object ChestHighlight {
             return
         }
 
-        val world = client.world ?: return
+        val world = client.level ?: return
 
         if (pendingChestScanTicks > 0) {
             scanNearbyChests()
@@ -83,7 +84,7 @@ object ChestHighlight {
     private fun scanNearbyChests() {
         val client = MinecraftClient.getInstance()
         val player = client.player ?: return
-        val world = client.world ?: return
+        val world = client.level ?: return
         val center = player.blockPos
 
         for (x in center.x - CHEST_SCAN_RADIUS..center.x + CHEST_SCAN_RADIUS) {
@@ -98,7 +99,7 @@ object ChestHighlight {
     }
 
     private fun isChestAt(pos: BlockPos): Boolean {
-        val world = MinecraftClient.getInstance().world ?: return false
+        val world = MinecraftClient.getInstance().level ?: return false
         val block = world.getBlockState(pos).block
         return block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST
     }
@@ -107,7 +108,7 @@ object ChestHighlight {
         val client = MinecraftClient.getInstance()
         if (!Settings.general.ChestHighlightEnabled || !LocationUtils.isInCrystalHollows()) return
 
-        val cameraObject = client.gameRenderer.camera
+        val cameraObject = client.gameRenderer.mainCamera
         val camera = cameraObject.cameraPos
         val matrices = context.matrices() ?: return
         val consumers = context.consumers() ?: return
@@ -164,14 +165,22 @@ object ChestHighlight {
         val count = if (mockup) 3 else highlightedChests.size
         val color = if (count > 0) 0xFF55FF55.toInt() else 0xFFAAAAAA.toInt()
 
-        context.drawText(
-            MinecraftClient.getInstance().textRenderer,
-            Text.literal("&a&lPowder Chest HUD: $count"),
-            x,
-            y,
-            0xFFFFFF,
-            true
-        )
+        val label = "Powder Chest HUD: $count"
+        val width = hudWidth(label)
+        HudPanel.drawTextPanel(context, x, y, width, 24, label, color, bold = true)
+    }
+
+    fun mockupWidth(): Int = hudWidth("Powder Chest HUD: 3")
+
+    private fun hudWidth(label: String): Int {
+        return (MinecraftClient.getInstance().font.width("\u00A7l$label") + HudPanel.PADDING * 2).coerceAtLeast(1)
     }
 
 }
+
+
+
+
+
+
+

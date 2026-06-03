@@ -12,6 +12,7 @@ import net.minecraft.client.option.KeyBinding
 import net.minecraft.client.util.InputUtil
 import net.minecraft.screen.slot.SlotActionType
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.util.Identifier
 import net.minecraft.text.Text
@@ -32,9 +33,12 @@ object SlotSwap {
     private var isSwapRunning = false
     private var isWaitingForClose = false
     private var skipSwapIfSqueakyEquipment = false
+    private val swapBeforeStacks = mutableMapOf<Int, ItemStack>()
+    private var swapRetryCount = 0
 
     private const val INITIAL_SWAP_DELAY_TICKS = 2
     private const val BETWEEN_SWAP_DELAY_TICKS = 6
+    private const val MAX_SWAP_RETRIES = 2
 
     fun triggerSwap(onComplete: (() -> Unit)? = null, skipIfSqueakyEquipment: Boolean = false) {
         if (!Settings.general.slotSwapEnabled) {
@@ -49,7 +53,7 @@ object SlotSwap {
             onComplete?.invoke()
         } else {
             resetSwapState(clearCallback = false)
-            mc.networkHandler?.sendChatCommand("eq")
+            mc?.player?.connection?.sendChatCommand("eq")
             isWaitingForEqMenu = true
             swapCallback = onComplete
             skipSwapIfSqueakyEquipment = skipIfSqueakyEquipment
@@ -59,7 +63,7 @@ object SlotSwap {
     @JvmStatic
     fun init() {
         HudElementRegistry.addLast(
-            Identifier.of("pgs_addons", "slot_swap_hud")
+            Identifier.fromNamespaceAndPath("pgs_addons", "slot_swap_hud")
         ) { context, _ ->
             onRenderHud(context)
         }
@@ -68,18 +72,18 @@ object SlotSwap {
                 KeyBindingHelper.registerKeyBinding(
                         KeyBinding(
                                 "PGS Execute Slot Swap (/eq)",
-                                InputUtil.Type.KEYSYM,
+                                com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
                                 GLFW.GLFW_KEY_UNKNOWN,
-                                KeyBinding.Category.MISC
+                                net.minecraft.client.KeyMapping.Category.MISC
                         )
                 )
         recordSwapKey =
                 KeyBindingHelper.registerKeyBinding(
                         KeyBinding(
                                 "PGS Toggle Record Slots",
-                                InputUtil.Type.KEYSYM,
+                                com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
                                 GLFW.GLFW_KEY_UNKNOWN,
-                                KeyBinding.Category.MISC
+                                net.minecraft.client.KeyMapping.Category.MISC
                         )
                 )
 
@@ -92,7 +96,7 @@ object SlotSwap {
                         return@EndTick
                     }
 
-                    if (recordSwapKey.wasPressed()) {
+                    if (recordSwapKey.consumeClick()) {
                         Settings.general.slotSwapRecordMode = !Settings.general.slotSwapRecordMode
                         Settings.save()
                         val status = if (Settings.general.slotSwapRecordMode) "§aON" else "§cOFF"
@@ -102,13 +106,13 @@ object SlotSwap {
                         )
                     }
 
-                    if (executeSwapKey.wasPressed()) {
+                    if (executeSwapKey.consumeClick()) {
                         triggerSwap()
                     }
 
                     if (isEqMenuOpen) {
                         isEqMenuOpen = false
-                        val screen = client.currentScreen
+                        val screen = client.screen
                         if (screen is HandledScreen<*>) {
                             startTickSwap()
                         }
@@ -182,7 +186,7 @@ object SlotSwap {
     }
 
     private fun startTickSwap() {
-        val screen = mc.currentScreen as? HandledScreen<*>
+        val screen = mc.screen as? HandledScreen<*>
         val hasSqueakyEquipment =
                 if (screen != null) EquipmentStatsHud.hasSqueakyEquipment(screen)
                 else EquipmentStatsHud.hasCachedSqueakyEquipment()
@@ -195,6 +199,8 @@ object SlotSwap {
         swapSlots = Settings.general.savedSwapSlots.toList()
         swapSlotIndex = 0
         swapDelayTicks = INITIAL_SWAP_DELAY_TICKS.toFloat()
+        swapBeforeStacks.clear()
+        swapRetryCount = 0
         isSwapRunning = true
     }
 
@@ -206,24 +212,51 @@ object SlotSwap {
             return
         }
 
-        val screen = client.currentScreen
+        val screen = client.screen
         if (screen !is HandledScreen<*>) {
             finishTickSwap(client)
             return
         }
 
         if (swapSlotIndex >= swapSlots.size) {
+            if (retryUnchangedSlots(screen)) return
             finishTickSwap(client)
             return
         }
 
-        guiClick(screen.screenHandler.syncId, swapSlots[swapSlotIndex] + 45)
+        val clickSlot = swapSlots[swapSlotIndex] + 45
+        if (clickSlot !in screen.menu.slots.indices) {
+            swapSlotIndex++
+            return
+        }
+
+        swapBeforeStacks.putIfAbsent(clickSlot, screen.menu.slots[clickSlot].item.copy())
+        guiClick(screen.menu.syncId, clickSlot)
         swapSlotIndex++
         swapDelayTicks = BETWEEN_SWAP_DELAY_TICKS.toFloat()
     }
 
+    private fun retryUnchangedSlots(screen: HandledScreen<*>): Boolean {
+        if (swapRetryCount >= MAX_SWAP_RETRIES) return false
+
+        val unchanged = swapSlots.filter { slotId ->
+            val clickSlot = slotId + 45
+            val before = swapBeforeStacks[clickSlot] ?: return@filter false
+            clickSlot in screen.menu.slots.indices && ItemStack.matches(before, screen.menu.slots[clickSlot].item)
+        }
+
+        if (unchanged.isEmpty()) return false
+
+        swapSlots = unchanged
+        swapSlotIndex = 0
+        swapDelayTicks = BETWEEN_SWAP_DELAY_TICKS.toFloat()
+        swapBeforeStacks.clear()
+        swapRetryCount++
+        return true
+    }
+
     private fun finishTickSwap(client: MinecraftClient) {
-        client.player?.closeHandledScreen()
+        client.player?.closeContainer()
         isSwapRunning = false
         isWaitingForClose = true
     }
@@ -235,11 +268,13 @@ object SlotSwap {
         swapSlotIndex = 0
         swapDelayTicks = 0f
         skipSwapIfSqueakyEquipment = false
+        swapBeforeStacks.clear()
+        swapRetryCount = 0
         if (clearCallback) swapCallback = null
     }
 
     private fun handleCloseWait(client: MinecraftClient) {
-        if (!isWaitingForClose || client.currentScreen is HandledScreen<*>) return
+        if (!isWaitingForClose || client.screen is HandledScreen<*>) return
 
         val callback = swapCallback
         resetSwapState()
@@ -253,7 +288,7 @@ object SlotSwap {
             clickType: SlotActionType = SlotActionType.THROW
     ) {
         val player = mc.player ?: return
-        mc.interactionManager?.clickSlot(id, index, button, clickType, player)
+        mc.gameMode?.clickSlot(id, index, button, clickType, player)
     }
 
     private fun onRenderHud(context: DrawContext) {
@@ -264,9 +299,56 @@ object SlotSwap {
     fun drawHud(context: DrawContext, mockup: Boolean) {
         val x = Settings.general.slotSwapHudX
         val y = Settings.general.slotSwapHudY
+        val stacks = if (mockup) List(3) { ItemStack.EMPTY } else savedStacks()
+        val panelWidth = hudWidth(if (stacks.isEmpty()) 3 else stacks.size)
+        val panelBodyY = HudPanel.draw(context, x, y, panelWidth, 50, "Slot Swap HUD")
+        val panelBodyX = x + HudPanel.PADDING
+
+        if (stacks.isEmpty()) {
+            HudPanel.drawLine(context, "No Slots Recorded", panelBodyX, panelBodyY, 0xFFFF5555.toInt())
+            return
+        }
+
+        stacks.forEachIndexed { index, stack ->
+            val itemX = panelBodyX + index * 22
+            drawSlotFrame(context, itemX, panelBodyY)
+            if (!stack.isEmpty()) {
+                context.drawItem(stack, itemX, panelBodyY)
+            }
+        }
+        return
         val color = 0xFF55FFFF.toInt() // Aqua
+        val bodyY = HudPanel.draw(context, x, y, 118, 58, "Slot Swap HUD")
+        val bodyX = x + HudPanel.PADDING
+        if (mockup) {
+            for (i in 0 until 3) {
+                drawSlotFrame(context, bodyX + i * 20, bodyY)
+            }
+            return
+        }
+        if (Settings.general.savedSwapSlots.isEmpty()) {
+            HudPanel.drawLine(context, "Â§cNo Slots Recorded", bodyX, bodyY)
+            return
+        }
+        var panelX = bodyX
+        Settings.general.savedSwapSlots.forEach { slotId ->
+            val player = mc.player
+            if (player != null) {
+                val handler = player.inventoryMenu
+                drawSlotFrame(context, panelX, bodyY)
+                if (slotId >= 0 && slotId < handler.slots.size) {
+                    val stack = handler.getSlot(slotId).stack
+                    if (!stack.isEmpty()) context.drawItem(stack, panelX, bodyY)
+                    else context.drawText(mc.font, "($slotId)", panelX, bodyY + 4, 0xFF888888.toInt(), true)
+                } else {
+                    context.drawText(mc.font, "!", panelX + 6, bodyY + 4, 0xFFFF5555.toInt(), true)
+                }
+            }
+            panelX += 22
+        }
+        return
         
-        context.drawText(mc.textRenderer, "§b[Slot Swap HUD]", x, y, color, true)
+        context.drawText(mc.font, "§b[Slot Swap HUD]", x, y, color, true)
 
         if (mockup) {
             // Draw a few placeholder boxes to represent item slots
@@ -284,7 +366,7 @@ object SlotSwap {
         }
 
         if (Settings.general.savedSwapSlots.isEmpty()) {
-            context.drawText(mc.textRenderer, "§cNo Slots Recorded", x, y + 12, 0xFFFFFFFF.toInt(), true)
+            context.drawText(mc.font, "§cNo Slots Recorded", x, y + 12, 0xFFFFFFFF.toInt(), true)
             return
         }
 
@@ -292,22 +374,51 @@ object SlotSwap {
         Settings.general.savedSwapSlots.forEach { slotId ->
             val player = mc.player
             if (player != null) {
-                val handler = player.playerScreenHandler
+                val handler = player.inventoryMenu
                 if (slotId >= 0 && slotId < handler.slots.size) {
                     val slot = handler.getSlot(slotId)
                     val stack = slot.stack
-                    if (!stack.isEmpty) {
+                    if (!stack.isEmpty()) {
                         context.drawItem(stack, currentX, y + 12)
                     } else {
                         // Show empty slot placeholder with slot ID
-                        context.drawText(mc.textRenderer, "($slotId)", currentX, y + 16, 0xFF888888.toInt(), true)
+                        context.drawText(mc.font, "($slotId)", currentX, y + 16, 0xFF888888.toInt(), true)
                     }
                 } else {
                     // Slot ID out of bounds for player screen handler
-                    context.drawText(mc.textRenderer, "!", currentX + 6, y + 16, 0xFFFF5555.toInt(), true)
+                    context.drawText(mc.font, "!", currentX + 6, y + 16, 0xFFFF5555.toInt(), true)
                 }
             }
             currentX += 22 // Spacing for items
         }
     }
+
+    fun mockupWidth(): Int = hudWidth(3)
+
+    private fun savedStacks(): List<ItemStack> {
+        val player = mc.player ?: return emptyList()
+        val handler = player.inventoryMenu
+        return Settings.general.savedSwapSlots.mapNotNull { slotId ->
+            if (slotId in 0 until handler.slots.size) handler.getSlot(slotId).stack else ItemStack.EMPTY
+        }
+    }
+
+    private fun hudWidth(slotCount: Int): Int {
+        val slotWidth = HudPanel.PADDING * 2 + slotCount.coerceAtLeast(1) * 22 - 2
+        val titleWidth = mc.font.width("Slot Swap HUD") + HudPanel.PADDING * 2
+        return maxOf(slotWidth, titleWidth)
+    }
+
+    private fun drawSlotFrame(context: DrawContext, x: Int, y: Int) {
+        context.fill(x, y, x + 16, y + 16, 0x44FFFFFF.toInt())
+        context.fill(x, y, x + 16, y + 1, 0xFFAAAAAA.toInt())
+        context.fill(x, y + 15, x + 16, y + 16, 0xFFAAAAAA.toInt())
+        context.fill(x, y + 1, x + 1, y + 15, 0xFFAAAAAA.toInt())
+        context.fill(x + 15, y + 1, x + 16, y + 15, 0xFFAAAAAA.toInt())
+    }
 }
+
+
+
+
+

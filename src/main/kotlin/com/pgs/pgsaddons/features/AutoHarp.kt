@@ -22,11 +22,11 @@ object AutoHarp {
                 if (clickedSlots.isNotEmpty()) clickedSlots.clear()
                 return@register
             }
-            val screen = client.currentScreen
+            val screen = client.screen
             if (screen is HandledScreen<*>) {
                 val title = screen.title.string
                 if (title.startsWith("Harp -", ignoreCase = true) || songNames.any { title.contains(it, ignoreCase = true) }) {
-                    val handler = screen.screenHandler
+                    val handler = screen.menu
                     val player = client.player ?: return@register
 
                     for (slotId in 37..43) {
@@ -34,13 +34,13 @@ object AutoHarp {
 
                         val slot = handler.getSlot(slotId)
                         val stack = slot.stack
-                        val translationKey = stack.item.translationKey
+                        val translationKey = stack.item.descriptionId
 
                         if (translationKey.contains("quartz", ignoreCase = true)) {
                             val elapsedTicks = detectedTicks[slotId] ?: 0f
                             if (!clickedSlots.contains(slotId)) {
                                 if (elapsedTicks >= com.pgs.pgsaddons.Settings.general.autoHarpCooldown) {
-                                    client.interactionManager?.clickSlot(
+                                    client.gameMode?.clickSlot(
                                         handler.syncId,
                                         slotId,
                                         0,
@@ -65,3 +65,6 @@ object AutoHarp {
         }
     }
 }
+
+
+

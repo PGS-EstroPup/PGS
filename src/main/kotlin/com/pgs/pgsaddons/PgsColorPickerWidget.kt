@@ -92,9 +92,9 @@ class PgsColorPickerWidget(
     }
 
     override fun charTyped(input: CharInput): Boolean {
-        if (!expanded || !hexFocused || !input.isValidChar) return false
+        if (!expanded || !hexFocused || !input.isAllowedChatCharacter()) return false
 
-        input.asString().forEach { char ->
+        input.codepointAsString().forEach { char ->
             if (char in '0'..'9' || char.lowercaseChar() in 'a'..'f') {
                 if (hexText.length < 6) {
                     hexText += char.uppercaseChar()
@@ -105,11 +105,11 @@ class PgsColorPickerWidget(
         return true
     }
 
-    override fun appendClickableNarrations(builder: NarrationMessageBuilder) {
-        appendDefaultNarrations(builder)
+    override fun updateWidgetNarration(builder: NarrationMessageBuilder) {
+        defaultButtonNarrationText(builder)
     }
 
-    override fun renderWidget(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
+    override fun extractWidgetRenderState(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         val hovered = isMouseOver(mouseX.toDouble(), mouseY.toDouble())
         val accentColor = 0xFF000000.toInt() or (Settings.general.menuColor and 0xFFFFFF)
         val borderColor = accentColor
@@ -119,8 +119,8 @@ class PgsColorPickerWidget(
         context.fill(x + width - 18, y + 3, x + width - 4, y + 15, 0xFF000000.toInt() or rgb)
         drawBorder(context, x + width - 18, y + 3, x + width - 4, y + 15, accentColor)
 
-        val textRenderer = MinecraftClient.getInstance().textRenderer
-        context.drawText(textRenderer, "#$hexText", x + 5, y + 5, 0xFFFFFFFF.toInt(), true)
+        val textRenderer = MinecraftClient.getInstance().font
+        context.text(textRenderer, "#$hexText", x + 5, y + 5, 0xFFFFFFFF.toInt(), true)
 
         if (!expanded) return
 
@@ -137,7 +137,7 @@ class PgsColorPickerWidget(
         context.fill(x, hexY, x + width, hexY + 18, 0xDD080808.toInt())
         drawBorder(context, x, hexY, x + width, hexY + 18, accentColor)
         val cursor = if (hexFocused && (System.currentTimeMillis() / 500L) % 2L == 0L) "|" else ""
-        context.drawText(textRenderer, "#$hexText$cursor", x + 5, hexY + 5, 0xFFFFFFFF.toInt(), true)
+        context.text(textRenderer, "#$hexText$cursor", x + 5, hexY + 5, 0xFFFFFFFF.toInt(), true)
     }
 
     private fun updateDrag(mouseX: Double, mouseY: Double) {
@@ -207,12 +207,15 @@ class PgsColorPickerWidget(
     }
 
     private fun drawHorizontalGradient(context: DrawContext, left: Int, top: Int, width: Int, height: Int, leftColor: Int, rightColor: Int) {
-        val matrices = context.matrices
-        matrices.pushMatrix()
-        matrices.translate(left.toFloat(), (top + height).toFloat())
-        matrices.rotate((-Math.PI / 2.0).toFloat())
-        context.fillGradient(0, 0, height, width, leftColor, rightColor)
-        matrices.popMatrix()
+        val steps = width.coerceAtLeast(1)
+        for (i in 0 until steps) {
+            val ratio = i / steps.toFloat()
+            val a = ((leftColor ushr 24) * (1f - ratio) + (rightColor ushr 24) * ratio).toInt()
+            val r = (((leftColor ushr 16) and 255) * (1f - ratio) + ((rightColor ushr 16) and 255) * ratio).toInt()
+            val g = (((leftColor ushr 8) and 255) * (1f - ratio) + ((rightColor ushr 8) and 255) * ratio).toInt()
+            val b = ((leftColor and 255) * (1f - ratio) + (rightColor and 255) * ratio).toInt()
+            context.fill(left + i, top, left + i + 1, top + height, (a shl 24) or (r shl 16) or (g shl 8) or b)
+        }
     }
 
     private fun drawBorder(context: DrawContext, left: Int, top: Int, right: Int, bottom: Int, color: Int) {
@@ -222,3 +225,4 @@ class PgsColorPickerWidget(
         context.fill(right - 1, top, right, bottom, color)
     }
 }
+

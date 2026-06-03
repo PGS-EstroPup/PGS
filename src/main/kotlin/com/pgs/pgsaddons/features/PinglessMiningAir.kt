@@ -88,7 +88,7 @@ object PinglessMiningAir {
                 return@register ActionResult.PASS
             }
 
-            val immutablePos = pos.toImmutable()
+            val immutablePos = pos.immutable()
             if (immutablePos in recentRemovals) {
                 PinglessMiningDebug.log("Air", "recently removed this block, waiting for cooldown", immutablePos, blockState.block)
                 return@register ActionResult.PASS
@@ -131,7 +131,7 @@ object PinglessMiningAir {
         updateRecentRemovals()
 
         val mine = pendingMine ?: return
-        val world = client.world ?: run {
+        val world = client.level ?: run {
             PinglessMiningDebug.log("Air", "cleared pending mine because world is null", mine.pos, mine.originalBlock)
             pendingMine = null
             return
@@ -220,11 +220,13 @@ object PinglessMiningAir {
     }
 
     private fun isActivelyMining(client: MinecraftClient, pos: BlockPos): Boolean {
-        if (!client.options.attackKey.isPressed) return false
+        if (!client.options.keyAttack.isPressed) return false
 
         val target = client.crosshairTarget
-        if (target?.type != HitResult.Type.BLOCK) return false
+        if (target?.type != net.minecraft.world.phys.HitResult.Type.BLOCK) return false
 
         return (target as BlockHitResult).blockPos == pos
     }
 }
+
+

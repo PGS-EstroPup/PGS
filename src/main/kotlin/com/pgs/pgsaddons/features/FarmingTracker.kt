@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
 import net.minecraft.sound.SoundEvents
 import net.minecraft.text.Text
 import net.minecraft.util.Identifier
@@ -23,19 +24,18 @@ object FarmingTracker {
 
     fun init() {
         ClientTickEvents.END_CLIENT_TICK.register { onTick() }
-        HudElementRegistry.addLast(Identifier.of("pgs_addons", "pest_timers")) { context, _ ->
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("pgs_addons", "pest_timers")) { context, _ ->
             onRenderHud(context)
         }
     }
 
     private fun onTick() {
         val client = MinecraftClient.getInstance()
-        if (client.world == null || client.player == null) return
-        if (!Settings.general.pestTimersEnabled) return
+        if (client.level == null || client.player == null) return
 
         val now = System.currentTimeMillis()
         if (chimeTicksRemaining > 0) {
-            client.player?.playSound(SoundEvents.BLOCK_NOTE_BLOCK_CHIME.value(), 1.0f, 1.0f)
+            client.player?.playSound(SoundEvents.NOTE_BLOCK_CHIME.value(), 1.0f, 1.0f)
             chimeTicksRemaining--
         }
 
@@ -59,17 +59,16 @@ object FarmingTracker {
     }
 
     private fun updatePestTimers(client: MinecraftClient) {
-        val entries = client.networkHandler?.playerList ?: return
+        val entries = client.player?.connection?.playerList ?: return
         val newTimers = mutableMapOf<String, String>()
 
         for (entry in entries) {
-            val text = stripFormatting(entry.displayName?.string ?: continue)
-            when {
-                text.contains("Alive:") -> newTimers["Alive"] = text.substringAfter("Alive:").trim()
-                text.contains("Spray:") -> newTimers["Spray"] = text.substringAfter("Spray:").trim()
-                text.contains("Bonus:") -> newTimers["Bonus"] = text.substringAfter("Bonus:").trim()
-                text.contains("Cooldown:") -> newTimers["Cooldown"] = text.substringAfter("Cooldown:").trim()
-            }
+            val text = stripFormatting(entry.tabListDisplayName?.string ?: continue)
+            collectTimerLine(text, newTimers)
+        }
+
+        for (line in LocationUtils.getScoreboardLines()) {
+            collectTimerLine(stripFormatting(line), newTimers)
         }
 
         pestTimers.clear()
@@ -107,14 +106,19 @@ object FarmingTracker {
 
     private fun triggerCycle2IfNeeded(now: Long) {
         if (cycle2TriggeredForThisCooldown) return
-        if (!AutoFarm2.startCycle2FromPestCooldown()) return
-        cycle2TriggeredForThisCooldown = true
-        alertUntilMillis = now + 4000L
-        chimeTicksRemaining = 5
+        if (AutoFarm2.startCycle2FromPestCooldown()) {
+            cycle2TriggeredForThisCooldown = true
+            alertUntilMillis = now + 4000L
+            chimeTicksRemaining = 5
+        }
     }
 
     fun isCycle2Ready(): Boolean {
         return cooldownReady || (countdownEndMillis > 0L && remainingOffsetSeconds() <= 0)
+    }
+
+    fun isSprayNone(): Boolean {
+        return pestTimers["Spray"]?.trim()?.equals("None", ignoreCase = true) == true
     }
 
     private fun onRenderHud(context: DrawContext) {
@@ -130,47 +134,37 @@ object FarmingTracker {
         val y = Settings.general.pestTimersY
         val spacing = 12
         var row = 0
+        val bodyY = HudPanel.draw(context, x, y, 170, 92, "Pest Tracker")
+        val bodyX = x + HudPanel.PADDING
 
-        context.drawText(client.textRenderer, "§6[Pest Tracker]", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-        row++
+        fun panelLine(text: String, color: Int = 0xFFFFAA00.toInt()) {
+            context.drawText(client.font, text, bodyX, bodyY + row * spacing, color, true)
+            row++
+        }
 
         if (mockup) {
-            context.drawText(client.textRenderer, "§6Spray: 15m 00s", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-            row++
-            context.drawText(client.textRenderer, "§6Bonus: 20m 00s", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-            row++
-            context.drawText(client.textRenderer, "§6Alive: 3", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-            row++
-            context.drawText(client.textRenderer, "§6Cooldown: 5m 00s", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-            row++
-            context.drawText(client.textRenderer, "§e  Countdown: 4m 30s", x, y + row * spacing, 0xFFFFFF55.toInt(), true)
+            panelLine("Spray: 15m 00s")
+            panelLine("Bonus: 20m 00s")
+            panelLine("Alive: 3")
+            panelLine("Cooldown: 5m 00s")
+            panelLine("Countdown: 4m 30s", 0xFFFFFF55.toInt())
             return
         }
 
         for (key in listOf("Spray", "Bonus", "Alive", "Cooldown")) {
-            pestTimers[key]?.let {
-                context.drawText(client.textRenderer, "§6$key: $it", x, y + row * spacing, 0xFFFFAA00.toInt(), true)
-                row++
-            }
+            pestTimers[key]?.let { panelLine("$key: $it") }
         }
 
         if (countdownEndMillis > 0L) {
             val remaining = remainingOffsetSeconds()
-            val label = if (remaining <= 0) "§2Pest Spawn Ready" else formatSeconds(remaining)
-            context.drawText(client.textRenderer, "§e  Countdown: $label", x, y + row * spacing, 0xFFFFFF55.toInt(), true)
+            val label = if (remaining <= 0) "Pest Spawn Ready" else formatSeconds(remaining)
+            panelLine("Countdown: $label", 0xFFFFFF55.toInt())
         }
 
         if (alertUntilMillis > System.currentTimeMillis()) {
-            val msg = Text.literal("§c§lPEST COOLDOWN READY")
-            val textWidth = client.textRenderer.getWidth(msg)
-            context.drawText(
-                client.textRenderer,
-                msg,
-                (client.window.scaledWidth - textWidth) / 2,
-                client.window.scaledHeight / 2 - 30,
-                0xFFFF4444.toInt(),
-                true
-            )
+            val msg = Text.literal("\u00A7c\u00A7lPEST COOLDOWN READY")
+            val textWidth = client.font.width(msg)
+            context.drawText(client.font, msg, (client.window.scaledWidth - textWidth) / 2, client.window.scaledHeight / 2 - 30, 0xFFFF4444.toInt(), true)
         }
     }
 
@@ -190,6 +184,15 @@ object FarmingTracker {
         return text.takeIf { it.all(Char::isDigit) }?.toIntOrNull()
     }
 
+    private fun collectTimerLine(text: String, timers: MutableMap<String, String>) {
+        when {
+            text.contains("Alive:") -> timers["Alive"] = text.substringAfter("Alive:").trim()
+            text.contains("Spray:") -> timers["Spray"] = text.substringAfter("Spray:").trim()
+            text.contains("Bonus:") -> timers["Bonus"] = text.substringAfter("Bonus:").trim()
+            text.contains("Cooldown:") -> timers["Cooldown"] = text.substringAfter("Cooldown:").trim()
+        }
+    }
+
     private fun parseAliveCount(input: String): Int? {
         return Regex("\\d+").find(input)?.value?.toIntOrNull()
     }
@@ -201,6 +204,6 @@ object FarmingTracker {
     }
 
     private fun stripFormatting(text: String): String {
-        return text.replace(Regex("§[0-9a-fk-or]", RegexOption.IGNORE_CASE), "")
+        return text.replace(Regex("\u00A7[0-9a-fk-or]", RegexOption.IGNORE_CASE), "")
     }
 }

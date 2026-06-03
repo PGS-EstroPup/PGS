@@ -25,19 +25,19 @@ object MobEsp {
         if (!LocationUtils.isInGarden()) return
 
         val client = MinecraftClient.getInstance()
-        val world = client.world ?: return
+        val world = client.level ?: return
         if (client.player == null) return
 
         val r = Settings.colorRed(Settings.general.pestEspColor)
         val g = Settings.colorGreen(Settings.general.pestEspColor)
         val b = Settings.colorBlue(Settings.general.pestEspColor)
 
-        val targets = world.entities.filter { it != client.player && !it.isRemoved && isGardenPest(it) }
+        val targets = world.entitiesForRendering().filter { it != client.player && !it.isRemoved && isGardenPest(it) }
         if (targets.isEmpty()) return
 
         val matrices = context.matrices() ?: return
         val consumers = context.consumers() ?: return
-        val cameraObject = client.gameRenderer.camera
+        val cameraObject = client.gameRenderer.mainCamera
         val camera = cameraObject.cameraPos
         val tickDelta = client.renderTickCounter.getTickProgress(false)
 
@@ -81,3 +81,9 @@ object MobEsp {
         )
     }
 }
+
+
+
+
+
+

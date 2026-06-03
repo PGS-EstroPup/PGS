@@ -29,23 +29,23 @@ object CustomEsp {
         if (targets.isEmpty()) return
 
         val client = MinecraftClient.getInstance()
-        val world = client.world ?: return
+        val world = client.level ?: return
         if (client.player == null) return
 
         val r = Settings.colorRed(Settings.general.customEspColor)
         val g = Settings.colorGreen(Settings.general.customEspColor)
         val b = Settings.colorBlue(Settings.general.customEspColor)
 
-        val matches = world.entities
+        val matches = world.entitiesForRendering()
             .mapNotNull { entity ->
-                if (matchesTarget(entity, targets)) resolveRenderTarget(entity, world.entities) else null
+                if (matchesTarget(entity, targets)) resolveRenderTarget(entity, world.entitiesForRendering()) else null
             }
             .distinct()
         if (matches.isEmpty()) return
 
         val matrices = context.matrices() ?: return
         val consumers = context.consumers() ?: return
-        val cameraObject = client.gameRenderer.camera
+        val cameraObject = client.gameRenderer.mainCamera
         val camera = cameraObject.cameraPos
         val tickDelta = client.renderTickCounter.getTickProgress(false)
 
@@ -138,3 +138,10 @@ object CustomEsp {
             .expand(0.1, 0.05, 0.1)
     }
 }
+
+
+
+
+
+
+

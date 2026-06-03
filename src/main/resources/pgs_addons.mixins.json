@@ -2,10 +2,10 @@
     "required": true,
     "minVersion": "0.8",
     "package": "com.pgs.pgsaddons.mixin",
-    "compatibilityLevel": "JAVA_21",
+    "compatibilityLevel": "JAVA_25",
     "refmap": "pgs_addons-refmap.json",
     "mixins": [],
-  "client": ["EntityRendererMixin", "PlayerEntityRendererMixin", "PlayerInventoryMixin", "HandledScreenAccessor", "InputAccessor", "KeyBindingAccessor", "KeyboardInputMixin", "ClientPlayNetworkHandlerMixin", "ScreenMixin", "ParentElementMixin"],
+  "client": ["HandledScreenAccessor", "InputAccessor", "KeyBindingAccessor", "ScreenMixin", "KeyboardInputMixin", "AutoFarmInputMixin", "ClientPlayNetworkHandlerMixin", "StopSwimmingPlayerMixin", "FrozenBlazeKeyboardMixin", "FrozenBlazeMouseMixin"],
     "injectors": {
         "defaultRequire": 1
     }

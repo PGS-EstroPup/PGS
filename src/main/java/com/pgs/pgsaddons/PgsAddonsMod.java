@@ -19,11 +19,15 @@ public class PgsAddonsMod implements ClientModInitializer {
       DeployablesTracker.init();
       com.pgs.pgsaddons.features.Timer.INSTANCE.init();
       com.pgs.pgsaddons.features.SlotSwap.init();
+      com.pgs.pgsaddons.features.AutoSell.INSTANCE.init();
       com.pgs.pgsaddons.features.EquipmentStatsHud.INSTANCE.init();
       com.pgs.pgsaddons.features.ArrowTypeTracker.INSTANCE.init();
       com.pgs.pgsaddons.features.FarmingTracker.INSTANCE.init();
+      com.pgs.pgsaddons.features.FrozenBlazeFishing.INSTANCE.init();
       com.pgs.pgsaddons.features.AutoFishKiller.INSTANCE.init();
       com.pgs.pgsaddons.features.AutoHarp.INSTANCE.init();
+      com.pgs.pgsaddons.features.AttackDestroyMode.INSTANCE.init();
+      com.pgs.pgsaddons.features.StopSwimming.INSTANCE.init();
       com.pgs.pgsaddons.features.AutoFarm2.INSTANCE.init();
       com.pgs.pgsaddons.features.DrawNodes.INSTANCE.init();
       com.pgs.pgsaddons.features.NotepadOverlay.INSTANCE.init();

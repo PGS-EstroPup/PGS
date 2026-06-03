@@ -46,6 +46,11 @@ class FishingSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
             groups.add(SettingsFunctionGroup(name, button, options))
         }
 
+        val lotusWormholeColor = PgsColorPickerWidget(0, 0, 100, 18, Settings.general.lotusWormholeColor) { color ->
+            Settings.general.lotusWormholeColor = color
+            Settings.save()
+        }
+
         var autofishButton: PgsButtonWidget? = null
         var autofishWithKillerButton: PgsButtonWidget? = null
         autofishButton = PgsButtonWidget(0, 0, 100, 20, Text.literal(onOff(Settings.general.autofish))) { button ->
@@ -74,6 +79,7 @@ class FishingSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
                 Settings.save()
             }, "Detection range for the bite indicator armor stand."),
             option("Leap Fish", toggle(Settings.general.autofishJumpBeforeCatch) { Settings.general.autofishJumpBeforeCatch = it }, "Jumps when a bite is detected, then waits 2-4 ticks before reeling in."),
+            option("Frozen Blaze", toggle(Settings.general.frozenBlazeFishingEnabled) { Settings.general.frozenBlazeFishingEnabled = it }, "After the first cast, holds crouch and slowly drifts sideways until keyboard or mouse input interrupts."),
             option("Autofish With Killer", autofishWithKillerButton, "Enables the fishing mode that swaps to a weapon, attacks, then swaps back to rod."),
             option("Killing Slot", PgsSliderWidget(0, 0, 100, 20, "Slot", 1.0, 9.0, Settings.general.killingItemSlot.toDouble()) {
                 Settings.general.killingItemSlot = it.toInt()
@@ -87,6 +93,12 @@ class FishingSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
                 Settings.general.killingSwingCount = it.toInt()
                 Settings.save()
             }, "Number of interact swings to send with the killing item.")
+        ))
+
+        group("Lotus Atoll", listOf(
+            option("Wormhole Detector", toggle(Settings.general.lotusWormholeDetectorEnabled) { Settings.general.lotusWormholeDetectorEnabled = it }, "Highlights active Lotus Atoll wormholes when their particles are detected."),
+            option("Tracer", toggle(Settings.general.lotusWormholeTracersEnabled) { Settings.general.lotusWormholeTracersEnabled = it }),
+            option("Color", lotusWormholeColor)
         ))
 
         val macroText = TextFieldWidget(textRenderer, 0, 0, 100, 20, Text.literal("Macro Check Alert Text"))

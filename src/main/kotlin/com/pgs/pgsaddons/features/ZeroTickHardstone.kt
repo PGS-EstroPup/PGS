@@ -50,7 +50,7 @@ object ZeroTickHardstone {
             }
 
             if (isAllowedItem) {
-                pendingBreaks[pos.toImmutable()] = PendingBreak(pos.toImmutable(), BREAK_DELAY_TICKS)
+                pendingBreaks[pos.immutable()] = PendingBreak(pos.immutable(), BREAK_DELAY_TICKS)
             }
 
             ActionResult.PASS
@@ -58,7 +58,7 @@ object ZeroTickHardstone {
     }
 
     private fun onClientTick(client: MinecraftClient) {
-        val world = client.world ?: run {
+        val world = client.level ?: run {
             pendingBreaks.clear()
             return
         }
@@ -74,3 +74,6 @@ object ZeroTickHardstone {
         }
     }
 }
+
+
+

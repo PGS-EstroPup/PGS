@@ -4,6 +4,8 @@ import com.pgs.pgsaddons.features.AutoFarmAction
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import net.minecraft.client.gui.Click
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
+import net.minecraft.client.gui.drawCenteredTextWithShadow
 import net.minecraft.client.gui.screen.Screen
 import net.minecraft.text.Text
 
@@ -21,10 +23,12 @@ class AutoFarmOrderScreen(private val parent: Screen) : Screen(Text.literal("Edi
             AutoFarmAction.ARMOR_SLOT_3,
             AutoFarmAction.INTERACT_MOUSEMAT,
             AutoFarmAction.INTERACT_ROD,
+            AutoFarmAction.AUTO_SPRAY,
             AutoFarmAction.INTERACT_VACUUM_UNTIL_0_PESTS,
             AutoFarmAction.HOLD_VACUUM_5S,
             AutoFarmAction.HOLD_HOE,
-            AutoFarmAction.SLOT_SWAP
+            AutoFarmAction.SLOT_SWAP,
+            AutoFarmAction.AUTO_SELL
         ),
         ActionCategory.TELEPORT to listOf(
             AutoFarmAction.SET_SPAWN,
@@ -299,7 +303,7 @@ class AutoFarmOrderScreen(private val parent: Screen) : Screen(Text.literal("Edi
         val first = paletteScroll[groupIndex] + 1
         val last = (paletteScroll[groupIndex] + maxVisible).coerceAtMost(actions.size)
         val text = Text.literal("$first-$last/${actions.size}")
-        context.drawText(textRenderer, text, group.x + group.w - textRenderer.getWidth(text), group.y - 11, 0xFFAAAAAA.toInt(), true)
+        context.drawText(textRenderer, text, group.x + group.w - textRenderer .width(text), group.y - 11, 0xFFAAAAAA.toInt(), true)
     }
 
     private fun drawClearButton(context: DrawContext, rect: Rect, enabled: Boolean) {
@@ -347,3 +351,7 @@ class AutoFarmOrderScreen(private val parent: Screen) : Screen(Text.literal("Edi
         context.fill(rect.x + rect.w - 1, rect.y, rect.x + rect.w, rect.y + rect.h, color)
     }
 }
+
+
+
+

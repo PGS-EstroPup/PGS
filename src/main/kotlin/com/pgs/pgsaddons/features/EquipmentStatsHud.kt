@@ -5,9 +5,11 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
 import net.minecraft.client.gui.screen.ingame.HandledScreen
 import net.minecraft.item.ItemStack
 import net.minecraft.util.Identifier
+import net.minecraft.world.entity.EquipmentSlot
 
 object EquipmentStatsHud {
     private val mc = MinecraftClient.getInstance()
@@ -21,7 +23,7 @@ object EquipmentStatsHud {
     @JvmStatic
     fun init() {
         ClientTickEvents.END_CLIENT_TICK.register { client ->
-            (client.currentScreen as? HandledScreen<*>)?.let { screen ->
+            (client.screen as? HandledScreen<*>)?.let { screen ->
                 if (isTargetEquipmentScreen(screen)) {
                     cacheFromScreen(screen)
                 }
@@ -29,7 +31,7 @@ object EquipmentStatsHud {
         }
 
         HudElementRegistry.addLast(
-            Identifier.of("pgs_addons", "equipment_stats_hud")
+            Identifier.fromNamespaceAndPath("pgs_addons", "equipment_stats_hud")
         ) { context, _ ->
             onRenderHud(context)
         }
@@ -45,10 +47,10 @@ object EquipmentStatsHud {
     fun drawHud(context: DrawContext, mockup: Boolean) {
         val x = Settings.general.equipmentStatsHudX
         val y = Settings.general.equipmentStatsHudY
-
-        context.drawText(mc.textRenderer, "§b[Equipment Stats HUD]", x, y, 0xFF55FFFF.toInt(), true)
-        drawGroup(context, "§eEquipments", equipmentSlots, cachedEquipmentStacks, x, y + 14, mockup)
-        drawGroup(context, "§aArmor", armorSlots, cachedArmorStacks, x, y + 48, mockup)
+        val bodyY = HudPanel.draw(context, x, y, 122, 98, "Equipment Stats HUD")
+        val bodyX = x + HudPanel.PADDING
+        drawGroup(context, "\u00A7eEquipments", equipmentSlots, cachedEquipmentStacks, bodyX, bodyY, mockup)
+        drawGroup(context, "\u00A7aArmor", armorSlots, liveArmorStacks(), bodyX, bodyY + 34, mockup)
     }
 
     private fun drawGroup(
@@ -60,21 +62,16 @@ object EquipmentStatsHud {
         y: Int,
         mockup: Boolean
     ) {
-        context.drawText(mc.textRenderer, label, x, y, 0xFFFFFFFF.toInt(), true)
+        context.drawText(mc.font, label, x, y, 0xFFFFFFFF.toInt(), true)
 
-        val stacks = if (mockup) {
-            List(slots.size) { ItemStack.EMPTY }
-        } else {
-            cachedStacks
-        }
-
+        val stacks = if (mockup) List(slots.size) { ItemStack.EMPTY } else cachedStacks
         var currentX = x
         stacks.forEachIndexed { index, stack ->
             drawSlotFrame(context, currentX, y + 11)
-            if (!stack.isEmpty) {
+            if (!stack.isEmpty()) {
                 context.drawItem(stack, currentX, y + 11)
             } else if (!mockup) {
-                context.drawText(mc.textRenderer, "(${slots[index]})", currentX, y + 15, 0xFF888888.toInt(), true)
+                context.drawText(mc.font, "(${slots[index]})", currentX, y + 15, 0xFF888888.toInt(), true)
             }
             currentX += 22
         }
@@ -96,7 +93,7 @@ object EquipmentStatsHud {
 
     fun hasCachedSqueakyEquipment(): Boolean {
         return cachedEquipmentStacks.any { stack ->
-            !stack.isEmpty && itemNameContains(stack, "squeaky")
+            !stack.isEmpty() && itemNameContains(stack, "squeaky")
         }
     }
 
@@ -108,12 +105,18 @@ object EquipmentStatsHud {
 
     private fun copySlots(screen: HandledScreen<*>, slots: List<Int>): List<ItemStack> {
         return slots.map { slotId ->
-            if (slotId !in 0 until screen.screenHandler.slots.size) {
-                ItemStack.EMPTY
-            } else {
-                screen.screenHandler.getSlot(slotId).stack.copy()
-            }
+            if (slotId !in 0 until screen.menu.slots.size) ItemStack.EMPTY else screen.menu.getSlot(slotId).stack.copy()
         }
+    }
+
+    private fun liveArmorStacks(): List<ItemStack> {
+        val player = mc.player ?: return cachedArmorStacks
+        return listOf(
+            player.getItemBySlot(EquipmentSlot.HEAD).copy(),
+            player.getItemBySlot(EquipmentSlot.CHEST).copy(),
+            player.getItemBySlot(EquipmentSlot.LEGS).copy(),
+            player.getItemBySlot(EquipmentSlot.FEET).copy()
+        )
     }
 
     private fun isTargetEquipmentScreen(screen: HandledScreen<*>): Boolean {
@@ -129,7 +132,7 @@ object EquipmentStatsHud {
 
     private fun normalizeText(text: String): String {
         return text
-            .replace(Regex("§."), "")
+            .replace(Regex("\u00A7."), "")
             .lowercase()
             .replace(Regex("[^a-z0-9]+"), "")
     }

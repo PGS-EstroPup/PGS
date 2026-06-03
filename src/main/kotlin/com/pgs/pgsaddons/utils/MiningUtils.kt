@@ -1,6 +1,7 @@
 package com.pgs.pgsaddons.utils
 
 import net.minecraft.client.MinecraftClient
+import com.pgs.pgsaddons.features.playerList
 
 object MiningUtils {
 
@@ -42,7 +43,7 @@ object MiningUtils {
         lastMiningSpeedUpdateNanos = now
 
         val client = MinecraftClient.getInstance()
-        val handler = client.networkHandler ?: run {
+        val handler = client?.player?.connection ?: run {
             clearCachedMiningSpeed()
             return 0
         }
@@ -50,7 +51,7 @@ object MiningUtils {
         var bestSpeed: Int? = null
         for (entry in handler.playerList) {
             val texts = listOfNotNull(
-                entry.displayName?.string,
+                entry.tabListDisplayName?.string,
                 entry.profile.name
             )
 
@@ -88,3 +89,5 @@ object MiningUtils {
         return speedText?.toIntOrNull()
     }
 }
+
+

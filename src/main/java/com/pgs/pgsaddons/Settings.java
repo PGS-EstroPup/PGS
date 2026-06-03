@@ -36,6 +36,10 @@ public class Settings {
                general.autofish = loaded.autofish;
                general.autofishRange = loaded.autofishRange;
                general.autofishJumpBeforeCatch = loaded.autofishJumpBeforeCatch;
+               general.frozenBlazeFishingEnabled = json.contains("\"frozenBlazeFishingEnabled\"") ? loaded.frozenBlazeFishingEnabled : general.frozenBlazeFishingEnabled;
+               general.lotusWormholeDetectorEnabled = json.contains("\"lotusWormholeDetectorEnabled\"") ? loaded.lotusWormholeDetectorEnabled : true;
+               general.lotusWormholeTracersEnabled = json.contains("\"lotusWormholeTracersEnabled\"") ? loaded.lotusWormholeTracersEnabled : true;
+               general.lotusWormholeColor = json.contains("\"lotusWormholeColor\"") ? loaded.lotusWormholeColor : general.lotusWormholeColor;
                general.iHateDioriteEnabled = loaded.iHateDioriteEnabled;
                general.pestEspEnabled = json.contains("\"pestEspEnabled\"") ? loaded.pestEspEnabled : true;
                general.mobEspColorIndex = clamp(loaded.mobEspColorIndex, 0, 7);
@@ -52,6 +56,7 @@ public class Settings {
                general.keyHighlightTracersEnabled = json.contains("\"keyHighlightTracersEnabled\"") ? loaded.keyHighlightTracersEnabled : true;
                general.noTerminatorSwingEnabled = loaded.noTerminatorSwingEnabled;
                general.showOwnNametag = loaded.showOwnNametag;
+               general.stopSwimmingEnabled = json.contains("\"stopSwimmingEnabled\"") ? loaded.stopSwimmingEnabled : general.stopSwimmingEnabled;
                general.menuColor = json.contains("\"menuColor\"") ? loaded.menuColor : general.menuColor;
                general.starredMobEspEnabled = loaded.starredMobEspEnabled;
                general.starredMobEspTracersEnabled = json.contains("\"starredMobEspTracersEnabled\"") ? loaded.starredMobEspTracersEnabled : true;
@@ -145,12 +150,17 @@ public class Settings {
                if (loaded.customEspNames != null) {
                   general.customEspNames = loaded.customEspNames;
                }
+               general.autoSellEnabled = loaded.autoSellEnabled;
+               if (loaded.autoSellNames != null) {
+                  general.autoSellNames = loaded.autoSellNames;
+               }
                general.autoFarm2Enabled = loaded.autoFarm2Enabled;
-               general.autoFarm2ToggleAttackMode = loaded.autoFarm2ToggleAttackMode;
+               general.attackDestroyToggleMode = loaded.attackDestroyToggleMode;
                general.autoFarm2HoeSlot = clamp(loaded.autoFarm2HoeSlot, 1, 9);
                general.autoFarm2MousematSlot = clamp(loaded.autoFarm2MousematSlot, 1, 9);
                general.autoFarm2RodSlot = clamp(loaded.autoFarm2RodSlot, 1, 9);
                general.autoFarm2VacuumSlot = clamp(loaded.autoFarm2VacuumSlot, 1, 9);
+               general.autoFarm2SpraySlot = clamp(loaded.autoFarm2SpraySlot, 1, 9);
                general.autoFarm2PestSpawnOffsetSeconds = Math.max(0, loaded.autoFarm2PestSpawnOffsetSeconds);
                if (loaded.autoFarm2PlotName != null) {
                   general.autoFarm2PlotName = loaded.autoFarm2PlotName;
@@ -197,6 +207,10 @@ public class Settings {
       public boolean autofish = true;
       public int autofishRange = 30;
       public boolean autofishJumpBeforeCatch = false;
+      public boolean frozenBlazeFishingEnabled = false;
+      public boolean lotusWormholeDetectorEnabled = true;
+      public boolean lotusWormholeTracersEnabled = true;
+      public int lotusWormholeColor = 0x55FFFF;
       public boolean iHateDioriteEnabled = true;
       public boolean pestEspEnabled = true;
       public int mobEspColorIndex = 0;
@@ -213,6 +227,7 @@ public class Settings {
       public boolean keyHighlightTracersEnabled = true;
       public boolean noTerminatorSwingEnabled = true;
       public boolean showOwnNametag = false;
+      public boolean stopSwimmingEnabled = false;
       public int menuColor = 0x555555;
       public boolean starredMobEspEnabled = true;
       public boolean starredMobEspTracersEnabled = true;
@@ -287,12 +302,16 @@ public class Settings {
       public int customEspColorIndex = 0;
       public int customEspColor = Settings.colorFromIndex(0);
       public String customEspNames = "";
+      public boolean autoSellEnabled = false;
+      public String autoSellNames = "";
       public boolean autoFarm2Enabled = false;
-      public boolean autoFarm2ToggleAttackMode = false;
+      @SerializedName(value = "attackDestroyToggleMode", alternate = {"autoFarm2ToggleAttackMode"})
+      public boolean attackDestroyToggleMode = false;
       public int autoFarm2HoeSlot = 1;
       public int autoFarm2MousematSlot = 2;
       public int autoFarm2RodSlot = 3;
       public int autoFarm2VacuumSlot = 4;
+      public int autoFarm2SpraySlot = 5;
       public int autoFarm2PestSpawnOffsetSeconds = 0;
       public String autoFarm2ActiveProfile = "Default";
       public String nodeActiveProfile = "Default";
@@ -313,6 +332,7 @@ public class Settings {
       public int mousematSlot = 2;
       public int rodSlot = 3;
       public int vacuumSlot = 4;
+      public int spraySlot = 5;
       public int pestSpawnOffsetSeconds = 0;
       public String plotName = "";
       public String armorSlot1 = "";
@@ -331,6 +351,24 @@ public class Settings {
       save();
    }
 
+   public static boolean renameAutoFarm2Profile(String profileName) {
+      String oldName = normalizeProfileName(general.autoFarm2ActiveProfile);
+      String newName = normalizeProfileName(profileName);
+      if (oldName.equals(newName)) return true;
+      if (general.autoFarm2Profiles.containsKey(newName)) return false;
+
+      saveCurrentAutoFarm2Profile();
+      AutoFarm2Profile profile = general.autoFarm2Profiles.remove(oldName);
+      if (profile == null) {
+         profile = snapshotAutoFarm2Profile();
+      }
+      general.autoFarm2Profiles.put(newName, profile);
+      general.autoFarm2ActiveProfile = newName;
+      applyAutoFarm2Profile(newName);
+      save();
+      return true;
+   }
+
    public static void saveCurrentAutoFarm2Profile() {
       general.autoFarm2Profiles.put(normalizeProfileName(general.autoFarm2ActiveProfile), snapshotAutoFarm2Profile());
    }
@@ -345,11 +383,11 @@ public class Settings {
 
    private static AutoFarm2Profile snapshotAutoFarm2Profile() {
       AutoFarm2Profile profile = new AutoFarm2Profile();
-      profile.toggleAttackMode = general.autoFarm2ToggleAttackMode;
       profile.hoeSlot = general.autoFarm2HoeSlot;
       profile.mousematSlot = general.autoFarm2MousematSlot;
       profile.rodSlot = general.autoFarm2RodSlot;
       profile.vacuumSlot = general.autoFarm2VacuumSlot;
+      profile.spraySlot = general.autoFarm2SpraySlot;
       profile.pestSpawnOffsetSeconds = general.autoFarm2PestSpawnOffsetSeconds;
       profile.plotName = general.autoFarm2PlotName;
       profile.armorSlot1 = general.autoFarm2ArmorSlot1;
@@ -364,11 +402,11 @@ public class Settings {
    private static void applyAutoFarm2Profile(String profileName) {
       AutoFarm2Profile profile = general.autoFarm2Profiles.get(normalizeProfileName(profileName));
       if (profile == null) return;
-      general.autoFarm2ToggleAttackMode = profile.toggleAttackMode;
       general.autoFarm2HoeSlot = clamp(profile.hoeSlot, 1, 9);
       general.autoFarm2MousematSlot = clamp(profile.mousematSlot, 1, 9);
       general.autoFarm2RodSlot = clamp(profile.rodSlot, 1, 9);
       general.autoFarm2VacuumSlot = clamp(profile.vacuumSlot, 1, 9);
+      general.autoFarm2SpraySlot = clamp(profile.spraySlot, 1, 9);
       general.autoFarm2PestSpawnOffsetSeconds = Math.max(0, profile.pestSpawnOffsetSeconds);
       general.autoFarm2PlotName = profile.plotName != null ? profile.plotName : "";
       general.autoFarm2ArmorSlot1 = profile.armorSlot1 != null ? profile.armorSlot1 : "";

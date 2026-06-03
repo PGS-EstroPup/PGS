@@ -2,8 +2,12 @@ package com.pgs.pgsaddons
 
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import net.minecraft.client.MinecraftClient
-import net.minecraft.client.font.TextRenderer
+import net.minecraft.client.gui.Font
 import net.minecraft.client.gui.DrawContext
+import net.minecraft.client.gui.drawText
+import net.minecraft.client.gui.drawTextWithShadow
+import net.minecraft.client.gui.drawCenteredTextWithShadow
+import net.minecraft.client.gui.drawTooltip
 import net.minecraft.client.gui.widget.ClickableWidget
 import net.minecraft.text.Text
 import net.minecraft.util.Formatting
@@ -57,7 +61,7 @@ object ThreePaneSettingsLayout {
 
     fun drawChrome(
         context: DrawContext,
-        textRenderer: TextRenderer,
+        textRenderer: Font,
         title: String,
         screenWidth: Int,
         startX: Int,
@@ -68,7 +72,7 @@ object ThreePaneSettingsLayout {
         val accentColor = 0xFF000000.toInt() or (Settings.general.menuColor and 0xFFFFFF)
         context.drawCenteredTextWithShadow(
             textRenderer,
-            Text.literal("PGS ADDONS").formatted(Formatting.BOLD),
+            Text.literal("PGS ADDONS").withStyle(Formatting.BOLD),
             screenWidth / 2,
             startY + 14,
             accentColor
@@ -132,7 +136,7 @@ object ThreePaneSettingsLayout {
             group.button.y = top
             group.button.setWidth(buttonWidth)
             group.button.height = BUTTON_HEIGHT
-            group.button.isActive = group.name == activeGroup
+            group.button.selected = group.name == activeGroup
             group.button.visible = group.button.x + group.button.width > left && group.button.x < right
         }
         val totalWidth = buttonWidths.sum() + (groups.size - 1).coerceAtLeast(0) * buttonGap
@@ -142,7 +146,7 @@ object ThreePaneSettingsLayout {
 
     fun renderOptions(
         context: DrawContext,
-        textRenderer: TextRenderer,
+        textRenderer: Font,
         mouseX: Int,
         mouseY: Int,
         delta: Float,
@@ -189,7 +193,7 @@ object ThreePaneSettingsLayout {
                         tooltipLines = wrapTooltip(row.description, textRenderer, 220)
                     }
                 }
-                row.widget.render(context, mouseX, mouseY, delta)
+                row.widget.extractRenderState(context, mouseX, mouseY, delta)
             }
             currentY += row.widget.height + ROW_GAP
         }
@@ -229,7 +233,7 @@ object ThreePaneSettingsLayout {
         val right = functionRight(startX, panelWidth)
         val top = topY(startY)
         val bottom = top + TOP_HEIGHT
-        val textRenderer = MinecraftClient.getInstance().textRenderer
+        val textRenderer = MinecraftClient.getInstance().font
         var tooltipLines: List<Text>? = null
 
         context.enableScissor(left, top, right, bottom)
@@ -237,7 +241,7 @@ object ThreePaneSettingsLayout {
             val overlapsViewport = group.button.x + group.button.width > left && group.button.x < right
             group.button.visible = overlapsViewport
             if (overlapsViewport) {
-                group.button.render(context, mouseX, mouseY, delta)
+                group.button.extractRenderState(context, mouseX, mouseY, delta)
                 if (!group.description.isNullOrBlank() &&
                     mouseX >= group.button.x &&
                     mouseX <= group.button.x + group.button.width &&
@@ -263,14 +267,14 @@ object ThreePaneSettingsLayout {
         return (name.length * 6 + 24).coerceIn(72, 140)
     }
 
-    private fun wrapTooltip(text: String, textRenderer: TextRenderer, maxWidth: Int): List<Text> {
+    private fun wrapTooltip(text: String, textRenderer: Font, maxWidth: Int): List<Text> {
         val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         val lines = mutableListOf<String>()
         var current = ""
 
         for (word in words) {
             val candidate = if (current.isEmpty()) word else "$current $word"
-            if (textRenderer.getWidth(candidate) <= maxWidth || current.isEmpty()) {
+            if (textRenderer.width(candidate) <= maxWidth || current.isEmpty()) {
                 current = candidate
             } else {
                 lines.add(current)
@@ -282,3 +286,11 @@ object ThreePaneSettingsLayout {
         return lines.map { Text.literal(it) }
     }
 }
+
+
+
+
+
+
+
+

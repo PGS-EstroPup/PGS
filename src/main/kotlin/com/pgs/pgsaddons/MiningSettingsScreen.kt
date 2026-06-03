@@ -105,14 +105,14 @@ class MiningSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
     }
 
     private fun onOff(value: Boolean): Text {
-        return Text.literal(if (value) "ON" else "OFF").formatted(if (value) Formatting.GREEN else Formatting.RED)
+        return Text.literal(if (value) "ON" else "OFF").withStyle(if (value) Formatting.GREEN else Formatting.RED)
     }
 
     private fun showPinglessMiningReminder() {
         val player = client?.player ?: return
-        player.sendMessage(Text.literal(reminderSeparator), false)
-        player.sendMessage(Text.literal("§e§lMake sure mining speed is visible on tab"), false)
-        player.sendMessage(Text.literal(reminderSeparator), false)
+        player.sendSystemMessage(Text.literal(reminderSeparator))
+        player.sendSystemMessage(Text.literal("§e§lMake sure mining speed is visible on tab"))
+        player.sendSystemMessage(Text.literal(reminderSeparator))
     }
 
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
@@ -136,3 +136,10 @@ class MiningSettingsScreen(private val parent: Screen) : Screen(Text.empty()) {
 
     override fun shouldPause(): Boolean = true
 }
+
+
+
+
+
+
+

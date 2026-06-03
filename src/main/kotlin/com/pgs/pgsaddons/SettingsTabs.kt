@@ -10,7 +10,6 @@ enum class SettingsTab {
     COMBAT,
     NODES,
     MINING,
-    NOTEPAD,
     DEBUG
 }
 
@@ -21,7 +20,6 @@ object SettingsTabs {
         SettingsTab.COMBAT to "\u00A7lCombat",
         SettingsTab.NODES to "\u00A7lFarming",
         SettingsTab.MINING to "\u00A7lMining",
-        SettingsTab.NOTEPAD to "\u00A7lNotes",
         SettingsTab.DEBUG to "\u00A7lDebug"
     )
 
@@ -66,7 +64,6 @@ object SettingsTabs {
             SettingsTab.COMBAT -> CombatSettingsScreen(parent)
             SettingsTab.NODES -> NodesSettingsScreen(parent)
             SettingsTab.MINING -> MiningSettingsScreen(parent)
-            SettingsTab.NOTEPAD -> NotepadScreen(parent)
             SettingsTab.DEBUG -> DebugSettingsScreen(parent)
         }
     }

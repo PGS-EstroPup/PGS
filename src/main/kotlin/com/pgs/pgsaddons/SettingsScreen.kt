@@ -3,6 +3,10 @@ package com.pgs.pgsaddons
 import com.pgs.pgsaddons.features.SlotSwap
 import com.pgs.pgsaddons.features.Timer
 import com.pgs.pgsaddons.features.CustomEsp
+import com.pgs.pgsaddons.features.AttackDestroyMode
+import com.pgs.pgsaddons.features.AutoSell
+import com.pgs.pgsaddons.features.NotepadOverlay
+import com.pgs.pgsaddons.features.StopSwimming
 import com.pgs.pgsaddons.utils.PgsButtonWidget
 import com.pgs.pgsaddons.utils.PgsSliderWidget
 import net.minecraft.client.gui.Click
@@ -63,10 +67,10 @@ class SettingsScreen : Screen(Text.empty()) {
 
         fun keybindOption(name: String, binding: KeyBinding, description: String? = null): SettingsOptionRow {
             lateinit var row: KeybindRow
-            val button = PgsButtonWidget(0, 0, 120, 20, binding.getBoundKeyLocalizedText()) {
+            val button = PgsButtonWidget(0, 0, 120, 20, binding.getTranslatedKeyMessage()) {
                 listeningRow = row
                 row.button.setMessage(Text.literal("> Press key <"))
-                row.button.isActive = true
+                row.button.selected = true
             }
             row = KeybindRow(binding, button)
             return option(name, button, description)
@@ -81,13 +85,38 @@ class SettingsScreen : Screen(Text.empty()) {
             Settings.save()
             button.setMessage(Text.literal(notepadRenderModeLabel(Settings.general.notepadRenderMode)))
         }
+        val attackModeButton = PgsButtonWidget(0, 0, 100, 20, Text.literal(attackModeLabel())) { button ->
+            AttackDestroyMode.toggleMode()
+            button.setMessage(Text.literal(attackModeLabel()))
+        }
+        val resetNotepadButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Reset")) {
+            NotepadOverlay.resetWindow()
+        }
+        val clearNotepadButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Clear")) {
+            Settings.general.notepadText = ""
+            Settings.save()
+        }
         group("General", listOf(
             option("Show Own Nametag", toggle(Settings.general.showOwnNametag) { Settings.general.showOwnNametag = it }),
             option("Deployables Tracker", toggle(Settings.general.deployablesTrackerEnabled) { Settings.general.deployablesTrackerEnabled = it }),
             option("Keep this on <3", toggle(Settings.general.minireenasOverlayEnabled) { Settings.general.minireenasOverlayEnabled = it }),
+            option("Menu Color", menuColor)
+        ))
+
+        group("Notepad", listOf(
             option("Notepad", notepadRenderModeButton, "Controls where the notepad HUD window is rendered."),
-            option("Menu Color", menuColor),
-            keybindOption("Attack / Destroy", client!!.options.attackKey, "Changes Minecraft's Controls > Attack/Destroy binding.")
+            option("Reset Notepad", resetNotepadButton, "Moves the notepad back to its default size and position."),
+            option("Clear Notes", clearNotepadButton, "Deletes the current notepad text.")
+        ))
+
+        group("Stop Swimming", listOf(
+            option("Stop Swimming", toggle(Settings.general.stopSwimmingEnabled) { Settings.general.stopSwimmingEnabled = it }, "Prevents the client from entering the swimming pose while enabled."),
+            keybindOption("Stop Swimming Key", StopSwimming.toggleKey, "Toggles Stop Swimming without opening settings.")
+        ))
+
+        group("Attack / Destroy", listOf(
+            option("Attack / Destroy", attackModeButton, "Chooses whether Attack / Destroy is held or toggled."),
+            keybindOption("Attack / Destroy Mode Key", AttackDestroyMode.toggleModeKey, "Switches Attack / Destroy between Hold and Toggle.")
         ))
 
         val timerInput = TextFieldWidget(textRenderer, 0, 0, 100, 20, Text.literal("Set timer"))
@@ -113,12 +142,15 @@ class SettingsScreen : Screen(Text.empty()) {
             keybindOption("Start / Stop", Timer.startStopKey)
         ))
 
-        val customEspNamesInput = TextFieldWidget(textRenderer, 0, 0, 100, 20, Text.literal("Names"))
-        customEspNamesInput.setPlaceholder(Text.literal("[ mob_one, mob_two ]"))
-        customEspNamesInput.text = Settings.general.customEspNames
-        customEspNamesInput.setChangedListener {
-            Settings.general.customEspNames = it
-            Settings.save()
+        val customEspNamesButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Edit List")) {
+            client?.setScreen(ListEditorScreen(
+                this,
+                "Custom ESP Names",
+                ListEditorScreen.fromCommaList(Settings.general.customEspNames)
+            ) { values ->
+                Settings.general.customEspNames = ListEditorScreen.toCommaList(values)
+                Settings.save()
+            })
         }
         val customEspColor = PgsColorPickerWidget(0, 0, 100, 18, Settings.general.customEspColor) { color ->
             Settings.general.customEspColor = color
@@ -128,13 +160,13 @@ class SettingsScreen : Screen(Text.empty()) {
             option("Main Toggle", toggle(Settings.general.customEspEnabled) { Settings.general.customEspEnabled = it }),
             option("Tracer", toggle(Settings.general.customEspTracersEnabled) { Settings.general.customEspTracersEnabled = it }),
             option("Color", customEspColor),
-            option("Names", customEspNamesInput, "Enter name(s) of the entitiy")
+            option("Names", customEspNamesButton, "Edit the entity name list.")
         ))
 
         val clearSwapsButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Clear")) {
             Settings.general.savedSwapSlots.clear()
             Settings.save()
-            client?.player?.sendMessage(Text.literal("§a[SlotSwap] Cleared all recorded slots!"), false)
+            client?.player?.sendSystemMessage(Text.literal("§a[SlotSwap] Cleared all recorded slots!"))
         }
         group("Slot Swap", listOf(
             option("Main Toggle", toggle(Settings.general.slotSwapEnabled) { Settings.general.slotSwapEnabled = it }, "Enables recorded equipment slot swapping through the swap key or Auto Farm action."),
@@ -144,6 +176,22 @@ class SettingsScreen : Screen(Text.empty()) {
             keybindOption("Execute Slot Swap", SlotSwap.executeSwapKey),
             keybindOption("Toggle Record Slots", SlotSwap.recordSwapKey)
         ), "Pick slots you like to swap with your current equipment/armor(s). Ex. Farming eq, sorrow swap, Dungeon Masks")
+
+        val autoSellNamesButton = PgsButtonWidget(0, 0, 100, 20, Text.literal("Edit List")) {
+            client?.setScreen(ListEditorScreen(
+                this,
+                "AutoSell Items",
+                ListEditorScreen.fromCommaList(Settings.general.autoSellNames)
+            ) { values ->
+                Settings.general.autoSellNames = ListEditorScreen.toCommaList(values)
+                Settings.save()
+            })
+        }
+        group("AutoSell", listOf(
+            option("Main Toggle", toggle(Settings.general.autoSellEnabled) { Settings.general.autoSellEnabled = it }, "Enables selling matching inventory items through /trades."),
+            option("Items", autoSellNamesButton, "Edit the item-name list AutoSell looks for."),
+            keybindOption("Execute", AutoSell.executeKey, "Scans your inventory, opens /trades, and sells matching items.")
+        ))
 
         group("Auto Harp", listOf(
             option("Main Toggle", toggle(Settings.general.autoHarpEnabled) { Settings.general.autoHarpEnabled = it }),
@@ -173,6 +221,10 @@ class SettingsScreen : Screen(Text.empty()) {
         }
     }
 
+    private fun attackModeLabel(): String {
+        return AttackDestroyMode.modeLabel()
+    }
+
     override fun render(context: DrawContext, mouseX: Int, mouseY: Int, delta: Float) {
         ThreePaneSettingsLayout.hide(groups)
         ThreePaneSettingsLayout.drawChrome(context, textRenderer, "PGS Addons Settings", width, startX, startY, panelWidth, panelHeight)
@@ -195,7 +247,7 @@ class SettingsScreen : Screen(Text.empty()) {
     override fun keyPressed(input: KeyInput): Boolean {
         val row = listeningRow
         if (row != null) {
-            val key = if (input.key() == GLFW.GLFW_KEY_ESCAPE) InputUtil.UNKNOWN_KEY else InputUtil.fromKeyCode(input)
+            val key = if (input.key() == GLFW.GLFW_KEY_ESCAPE) InputUtil.UNKNOWN else InputUtil.getKey(input)
             setBinding(row, key)
             return true
         }
@@ -205,20 +257,24 @@ class SettingsScreen : Screen(Text.empty()) {
     override fun mouseClicked(click: Click, doubled: Boolean): Boolean {
         val row = listeningRow
         if (row != null) {
-            setBinding(row, InputUtil.Type.MOUSE.createFromCode(click.button()))
+            setBinding(row, com.mojang.blaze3d.platform.InputConstants.Type.MOUSE.getOrCreate(click.button()))
             return true
         }
         return super.mouseClicked(click, doubled)
     }
 
-    private fun setBinding(row: KeybindRow, key: InputUtil.Key) {
-        row.binding.setBoundKey(key)
-        KeyBinding.updateKeysByCode()
-        client?.options?.write()
+    private fun setBinding(row: KeybindRow, key: com.mojang.blaze3d.platform.InputConstants.Key) {
+        row.binding.setKey(key)
+        KeyBinding.resetMapping()
+        client?.options?.save()
         listeningRow = null
-        row.button.isActive = false
-        row.button.setMessage(row.binding.getBoundKeyLocalizedText())
+        row.button.selected = false
+        row.button.setMessage(row.binding.getTranslatedKeyMessage())
     }
 
     override fun shouldPause(): Boolean = true
 }
+
+
+
+

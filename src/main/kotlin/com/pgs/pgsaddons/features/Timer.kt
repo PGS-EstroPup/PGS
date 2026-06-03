@@ -25,14 +25,14 @@ object Timer {
         startStopKey = KeyBindingHelper.registerKeyBinding(
             KeyBinding(
                 "PGS Timer Start / Stop",
-                InputUtil.Type.KEYSYM,
+                com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_UNKNOWN,
-                KeyBinding.Category.MISC
+                net.minecraft.client.KeyMapping.Category.MISC
             )
         )
 
         ClientTickEvents.END_CLIENT_TICK.register { client ->
-            while (startStopKey.wasPressed()) {
+            while (startStopKey.consumeClick()) {
                 toggle(client)
             }
 
@@ -42,7 +42,7 @@ object Timer {
         }
 
         HudElementRegistry.addLast(
-            Identifier.of("pgs_addons", "timer")
+            Identifier.fromNamespaceAndPath("pgs_addons", "timer")
         ) { context, _ ->
             onRenderHud(context)
         }
@@ -51,18 +51,18 @@ object Timer {
     private fun toggle(client: MinecraftClient) {
         if (isRunning()) {
             stop()
-            client.player?.sendMessage(Text.literal("§c[Timer] Stopped"), false)
+            client.player?.sendSystemMessage(Text.literal("\u00A7c[Timer] Stopped"))
             return
         }
 
         val seconds = parseDurationSeconds(Settings.general.timerDuration)
         if (seconds <= 0) {
-            client.player?.sendMessage(Text.literal("§c[Timer] Enter a time like 2m 30s."), false)
+            client.player?.sendSystemMessage(Text.literal("\u00A7c[Timer] Enter a time like 2m 30s."))
             return
         }
 
         endTimeMillis = System.currentTimeMillis() + seconds * 1000L
-        client.player?.sendMessage(Text.literal("§a[Timer] Started for ${formatSeconds(seconds)}"), false)
+        client.player?.sendSystemMessage(Text.literal("\u00A7a[Timer] Started for ${formatSeconds(seconds)}"))
     }
 
     private fun stop() {
@@ -71,9 +71,9 @@ object Timer {
 
     private fun finish(client: MinecraftClient) {
         stop()
-        val message = Text.literal("TIMER ENDED").formatted(Formatting.RED, Formatting.BOLD)
-        client.inGameHud.setTitle(message)
-        client.inGameHud.setTitleTicks(5, 40, 10)
+        val message = Text.literal("TIMER ENDED").withStyle(Formatting.RED, Formatting.BOLD)
+        client.gui.setTitle(message)
+        client.gui.setTitleTicks(5, 40, 10)
         client.player?.sendMessage(message, false)
         runCommand(client)
     }
@@ -81,7 +81,7 @@ object Timer {
     private fun runCommand(client: MinecraftClient) {
         val command = Settings.general.timerCommand.trim().removePrefix("/")
         if (command.isEmpty()) return
-        client.networkHandler?.sendChatCommand(command)
+        client.player?.connection?.sendChatCommand(command)
     }
 
     private fun isRunning(): Boolean {
@@ -123,8 +123,13 @@ object Timer {
     fun drawHud(context: DrawContext, mockup: Boolean) {
         val x = Settings.general.timerHudX
         val y = Settings.general.timerHudY
-        val label = if (mockup) "§e§l[Timer] 02:30" else "§e§l[Timer] ${formatSeconds(remainingSeconds())}"
-        context.drawText(mc.textRenderer, label, x, y, 0xFFFFFF55.toInt(), true)
+        val label = if (mockup) "Timer 02:30" else "Timer ${formatSeconds(remainingSeconds())}"
+        val width = (mc.font.width("\u00A7l$label") + HudPanel.PADDING * 2).coerceAtLeast(84)
+        HudPanel.drawTextPanel(context, x, y, width, 24, label, 0xFFFFFF55.toInt(), bold = true)
+    }
+
+    fun mockupWidth(): Int {
+        return (mc.font.width("\u00A7lTimer 02:30") + HudPanel.PADDING * 2).coerceAtLeast(84)
     }
 
     private fun formatSeconds(seconds: Long): String {
