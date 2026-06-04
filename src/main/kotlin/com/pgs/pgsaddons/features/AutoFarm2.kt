@@ -22,10 +22,13 @@ import net.minecraft.util.Hand
 import net.minecraft.util.PlayerInput
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Vec2f
+import net.minecraft.util.math.Vec3d
 import java.util.concurrent.ThreadLocalRandom
 import org.lwjgl.glfw.GLFW
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.hypot
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -95,6 +98,9 @@ object AutoFarm2 {
     private var pendingMovementTicks = 0f
     private var pestCount = 0
     private var cooldownReady = false
+    private val pestLookSmoother = HumanLookSmoother()
+    private var lastPestLookNs = System.nanoTime()
+    private var pestAimPoint: PestAimPoint? = null
     private val completedActions = mutableMapOf<Cycle, Int>()
 
     private const val MIN_NODE_TICK_OFFSET = 3
@@ -300,6 +306,7 @@ object AutoFarm2 {
                 selectSlot(Settings.general.autoFarm2VacuumSlot)
                 vacuumActive = true
                 vacuumInteractTicks = 0f
+                resetPestLookSmoother()
             }
             AutoFarmAction.HOLD_VACUUM_5S -> {
                 selectSlot(Settings.general.autoFarm2VacuumSlot)
@@ -423,10 +430,12 @@ object AutoFarm2 {
             finishVacuum()
             return
         }
+
+        val aligned = lookAtNearestPest(client)
         vacuumInteractTicks -= TpsSync.getServerTicksPerClientTick()
         if (vacuumInteractTicks <= 0f) {
             val player = client.player ?: return
-            if (lookAtNearestPest(client)) {
+            if (aligned) {
                 client.gameMode?.interactItem(player, Hand.MAIN_HAND)
                 player.swingHand(Hand.MAIN_HAND, true)
                 vacuumInteractTicks = ThreadLocalRandom.current().nextInt(7, 13).toFloat()
@@ -462,8 +471,16 @@ object AutoFarm2 {
     private fun finishVacuum() {
         if (!vacuumActive) return
         vacuumActive = false
+        resetPestLookSmoother()
         startCooldown()
         next()
+    }
+
+    private fun resetPestLookSmoother() {
+        val player = mc.player ?: return
+        pestLookSmoother.reset(player.yaw, player.pitch)
+        pestAimPoint = null
+        lastPestLookNs = System.nanoTime()
     }
 
     private fun lookAtNearestPest(client: MinecraftClient): Boolean {
@@ -473,29 +490,214 @@ object AutoFarm2 {
             .asSequence()
             .filter { it !== player && !it.isRemoved && isVacuumPest(it) }
             .minByOrNull { it.squaredDistanceTo(player) }
-            ?: return false
+        if (target == null) {
+            pestLookSmoother.reset(player.yaw, player.pitch)
+            pestAimPoint = null
+            lastPestLookNs = System.nanoTime()
+            return false
+        }
 
         val eye = player.eyePos
-        val targetPos = target.boundingBox.center
+        val now = System.nanoTime()
+        val targetPos = getPestAimPoint(target, now)
         val dx = targetPos.x - eye.x
         val dy = targetPos.y - eye.y
         val dz = targetPos.z - eye.z
         val horizontal = sqrt(dx * dx + dz * dz)
 
-        val yaw = Math.toDegrees(atan2(dz, dx)).toFloat() - 90f
+        val yaw = wrapDegrees(Math.toDegrees(atan2(dz, dx)).toFloat() - 90f)
         val pitch = (-Math.toDegrees(atan2(dy, horizontal)).toFloat()).coerceIn(-90f, 90f)
-        val nextYaw = approachAngle(player.yaw, yaw, ThreadLocalRandom.current().nextDouble(9.0, 15.0).toFloat())
-        val nextPitch = approachAngle(player.pitch, pitch, ThreadLocalRandom.current().nextDouble(7.0, 12.0).toFloat()).coerceIn(-90f, 90f)
 
-        player.yaw = nextYaw
-        player.pitch = nextPitch
-        player.headYaw = nextYaw
-        player.bodyYaw = nextYaw
-        return abs(angleDelta(nextYaw, yaw)) <= 8f && abs(nextPitch - pitch) <= 8f
+        val dt = ((now - lastPestLookNs) / 1_000_000_000.0).toFloat().coerceIn(0.001f, 0.075f)
+        lastPestLookNs = now
+
+        val targetWidthDeg = angularTargetWidthDeg(eye.x, eye.y, eye.z, target)
+        val next = pestLookSmoother.update(
+            currentYaw = player.yaw,
+            currentPitch = player.pitch,
+            targetYaw = yaw,
+            targetPitch = pitch,
+            targetWidthDeg = targetWidthDeg,
+            targetKey = target.id,
+            dt = dt
+        )
+
+        player.yaw = next.yaw
+        player.pitch = next.pitch
+        player.headYaw = next.yaw
+        player.bodyYaw = next.yaw
+
+        val tolerance = max(3f, targetWidthDeg * 0.65f).coerceAtMost(8f)
+        return abs(angleDelta(next.yaw, yaw)) <= tolerance && abs(next.pitch - pitch) <= tolerance
     }
 
     private fun isVacuumPest(entity: Entity): Boolean {
         return entity is SilverfishEntity || entity is BatEntity
+    }
+
+    private fun getPestAimPoint(entity: Entity, nowNs: Long): Vec3d {
+        val cached = pestAimPoint
+        val aimPoint = if (cached != null && cached.entityId == entity.id && nowNs < cached.rerollAtNs) {
+            cached
+        } else {
+            PestAimPoint(
+                entityId = entity.id,
+                xFraction = randomHitboxFraction(),
+                yFraction = randomHitboxFraction(),
+                zFraction = randomHitboxFraction(),
+                rerollAtNs = nowNs + ThreadLocalRandom.current().nextLong(450_000_000L, 850_000_000L)
+            ).also { pestAimPoint = it }
+        }
+
+        val box = entity.boundingBox
+        return Vec3d(
+            box.minX + (box.maxX - box.minX) * aimPoint.xFraction,
+            box.minY + (box.maxY - box.minY) * aimPoint.yFraction,
+            box.minZ + (box.maxZ - box.minZ) * aimPoint.zFraction
+        )
+    }
+
+    private fun randomHitboxFraction(): Double {
+        return ThreadLocalRandom.current().nextDouble(0.18, 0.82)
+    }
+
+    private data class LookRotation(val yaw: Float, val pitch: Float)
+
+    private data class PestAimPoint(
+        val entityId: Int,
+        val xFraction: Double,
+        val yFraction: Double,
+        val zFraction: Double,
+        val rerollAtNs: Long
+    )
+
+    private class HumanLookSmoother {
+        private var initialized = false
+        private var activeTargetKey: Int? = null
+        private var startYaw = 0f
+        private var startPitch = 0f
+        private var goalYaw = 0f
+        private var goalPitch = 0f
+        private var rawTargetYaw = 0f
+        private var rawTargetPitch = 0f
+        private var elapsed = 0f
+        private var duration = 0.12f
+        private var lastOutputYaw = 0f
+        private var lastOutputPitch = 0f
+
+        fun reset(currentYaw: Float, currentPitch: Float) {
+            initialized = true
+            activeTargetKey = null
+            startYaw = wrapDegrees(currentYaw)
+            startPitch = currentPitch.coerceIn(-90f, 90f)
+            goalYaw = startYaw
+            goalPitch = startPitch
+            rawTargetYaw = startYaw
+            rawTargetPitch = startPitch
+            elapsed = 0f
+            duration = 0.12f
+            lastOutputYaw = startYaw
+            lastOutputPitch = startPitch
+        }
+
+        fun update(
+            currentYaw: Float,
+            currentPitch: Float,
+            targetYaw: Float,
+            targetPitch: Float,
+            targetWidthDeg: Float,
+            targetKey: Int?,
+            dt: Float
+        ): LookRotation {
+            val safeCurrentYaw = wrapDegrees(currentYaw)
+            val safeCurrentPitch = currentPitch.coerceIn(-90f, 90f)
+            val safeTargetYaw = wrapDegrees(targetYaw)
+            val safeTargetPitch = targetPitch.coerceIn(-90f, 90f)
+            val safeWidth = targetWidthDeg.coerceIn(0.75f, 16f)
+
+            if (!initialized) {
+                reset(safeCurrentYaw, safeCurrentPitch)
+            }
+
+            val externalMove = angularDistance(safeCurrentYaw, safeCurrentPitch, lastOutputYaw, lastOutputPitch)
+            if (externalMove > 28f) {
+                reset(safeCurrentYaw, safeCurrentPitch)
+            }
+
+            val targetChanged = activeTargetKey != targetKey
+            val targetDrift = angularDistance(rawTargetYaw, rawTargetPitch, safeTargetYaw, safeTargetPitch)
+            val residualError = angularDistance(safeCurrentYaw, safeCurrentPitch, safeTargetYaw, safeTargetPitch)
+            val planFinished = elapsed >= duration
+            val shouldStartNewPlan =
+                targetChanged ||
+                        targetDrift > 1.25f ||
+                        (planFinished && residualError > max(0.35f, safeWidth * 0.18f))
+
+            if (shouldStartNewPlan) {
+                beginPlan(
+                    fromYaw = safeCurrentYaw,
+                    fromPitch = safeCurrentPitch,
+                    targetYaw = safeTargetYaw,
+                    targetPitch = safeTargetPitch,
+                    targetWidthDeg = safeWidth,
+                    targetKey = targetKey,
+                    correction = !targetChanged && residualError < 10f
+                )
+            }
+
+            elapsed += dt
+
+            val progress = minimumJerk((elapsed / duration).coerceIn(0f, 1f))
+            val nextYaw = wrapDegrees(startYaw + angleDelta(startYaw, goalYaw) * progress)
+            val nextPitch = (startPitch + (goalPitch - startPitch) * progress).coerceIn(-90f, 90f)
+
+            lastOutputYaw = nextYaw
+            lastOutputPitch = nextPitch
+            return LookRotation(nextYaw, nextPitch)
+        }
+
+        private fun beginPlan(
+            fromYaw: Float,
+            fromPitch: Float,
+            targetYaw: Float,
+            targetPitch: Float,
+            targetWidthDeg: Float,
+            targetKey: Int?,
+            correction: Boolean
+        ) {
+            activeTargetKey = targetKey
+            startYaw = wrapDegrees(fromYaw)
+            startPitch = fromPitch.coerceIn(-90f, 90f)
+            rawTargetYaw = wrapDegrees(targetYaw)
+            rawTargetPitch = targetPitch.coerceIn(-90f, 90f)
+
+            val dyaw = angleDelta(startYaw, rawTargetYaw)
+            val dpitch = rawTargetPitch - startPitch
+            val distance = hypot(dyaw.toDouble(), dpitch.toDouble()).toFloat()
+            val primaryGain = when {
+                correction -> 1.0f
+                distance < 5f -> 1.0f
+                else -> 0.985f
+            }
+
+            goalYaw = wrapDegrees(startYaw + dyaw * primaryGain)
+            goalPitch = (startPitch + dpitch * primaryGain).coerceIn(-90f, 90f)
+            duration = movementDurationSeconds(distance, targetWidthDeg, correction)
+            elapsed = 0f
+        }
+
+        private fun movementDurationSeconds(distanceDeg: Float, targetWidthDeg: Float, correction: Boolean): Float {
+            val d = distanceDeg.coerceAtLeast(0.001f)
+            val w = targetWidthDeg.coerceAtLeast(0.75f)
+            val indexOfDifficulty = log2(d / w + 1f)
+            val base = if (correction) 0.045f else 0.060f
+            val slope = if (correction) 0.030f else 0.050f
+
+            return (base + slope * indexOfDifficulty).coerceIn(
+                if (correction) 0.050f else 0.075f,
+                if (correction) 0.130f else 0.260f
+            )
+        }
     }
 
     private fun runWardrobe(slotText: String) {
@@ -845,10 +1047,50 @@ object AutoFarm2 {
     }
 
     private fun angleDelta(current: Float, target: Float): Float {
-        var delta = (target - current) % 360f
-        if (delta >= 180f) delta -= 360f
-        if (delta < -180f) delta += 360f
-        return delta
+        return wrapDegrees(target - current)
+    }
+
+    private fun minimumJerk(t: Float): Float {
+        val u = t.coerceIn(0f, 1f)
+        val u2 = u * u
+        val u3 = u2 * u
+        val u4 = u3 * u
+        val u5 = u4 * u
+        return 10f * u3 - 15f * u4 + 6f * u5
+    }
+
+    private fun angularTargetWidthDeg(eyeX: Double, eyeY: Double, eyeZ: Double, entity: Entity): Float {
+        val box = entity.boundingBox
+        val center = box.center
+        val dx = center.x - eyeX
+        val dy = center.y - eyeY
+        val dz = center.z - eyeZ
+        val distance = sqrt(dx * dx + dy * dy + dz * dz).coerceAtLeast(0.001)
+        val sizeX = box.maxX - box.minX
+        val sizeY = box.maxY - box.minY
+        val sizeZ = box.maxZ - box.minZ
+        val radius = max(sizeX, max(sizeY, sizeZ)) * 0.5
+
+        return Math.toDegrees(2.0 * atan2(radius, distance))
+            .toFloat()
+            .coerceIn(0.75f, 14f)
+    }
+
+    private fun angularDistance(yawA: Float, pitchA: Float, yawB: Float, pitchB: Float): Float {
+        val yaw = angleDelta(yawA, yawB)
+        val pitch = pitchB - pitchA
+        return hypot(yaw.toDouble(), pitch.toDouble()).toFloat()
+    }
+
+    private fun wrapDegrees(angleIn: Float): Float {
+        var angle = angleIn % 360f
+        if (angle >= 180f) angle -= 360f
+        if (angle < -180f) angle += 360f
+        return angle
+    }
+
+    private fun log2(value: Float): Float {
+        return (ln(value.toDouble()) / ln(2.0)).toFloat()
     }
 
     private fun message(text: String) {
