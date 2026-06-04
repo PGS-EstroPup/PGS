@@ -96,6 +96,10 @@ object AutoFarm2 {
     private var pendingMovementVertical = NodeVerticalDirection.NONE
     private var pendingMovementHorizontal = NodeHorizontalDirection.NONE
     private var pendingMovementTicks = 0f
+    private var pendingActionNodePos: BlockPos? = null
+    private var pendingActionNodeType = NodeType.UNSET
+    private var pendingActionPlotName = ""
+    private var pendingActionTicks = 0f
     private var pestCount = 0
     private var cooldownReady = false
     private val pestLookSmoother = HumanLookSmoother()
@@ -828,27 +832,31 @@ object AutoFarm2 {
     }
 
     private fun updateLastNodeDirection() {
-        val player = mc.player ?: return
         val currentNode = currentPathNode()
-        handleActionNode(currentNode)
-        val node = currentNode?.takeIf { it.isMovementNode } ?: return
+
+        tickPendingMovementNode()
+        tickPendingActionNode()
+        queueMovementNode(currentNode)
+        queueActionNode(currentNode)
+    }
+
+    private fun queueMovementNode(node: PathNode?) {
+        if (node == null || !node.isMovementNode) return
+        if (lastAppliedMovementNodePos == node.pos || pendingMovementNodePos == node.pos) return
+
         val offset = randomNodeTickOffset()
-
-        if (lastAppliedMovementNodePos != node.pos) {
-            if (offset <= 0) {
-                applyMovementNode(node.pos, node.vertical, node.horizontal)
-                return
-            }
-
-            if (pendingMovementNodePos != node.pos) {
-                pendingMovementNodePos = node.pos
-                pendingMovementVertical = node.vertical
-                pendingMovementHorizontal = node.horizontal
-                pendingMovementTicks = offset.toFloat()
-                return
-            }
+        if (offset <= 0) {
+            applyMovementNode(node.pos, node.vertical, node.horizontal)
+            return
         }
 
+        pendingMovementNodePos = node.pos
+        pendingMovementVertical = node.vertical
+        pendingMovementHorizontal = node.horizontal
+        pendingMovementTicks = offset.toFloat()
+    }
+
+    private fun tickPendingMovementNode() {
         val pendingPos = pendingMovementNodePos ?: return
         pendingMovementTicks -= TpsSync.getServerTicksPerClientTick()
         if (pendingMovementTicks <= 0f) {
@@ -879,21 +887,45 @@ object AutoFarm2 {
             ?.first
     }
 
-    private fun handleActionNode(node: PathNode?) {
+    private fun queueActionNode(node: PathNode?) {
         if (node == null || !node.isActionNode) {
-            lastAppliedActionNodePos = null
+            if (pendingActionNodePos == null) {
+                lastAppliedActionNodePos = null
+            }
             return
         }
-        if (lastAppliedActionNodePos == node.pos) return
+        if (lastAppliedActionNodePos == node.pos || pendingActionNodePos == node.pos) return
 
-        when (node.type) {
+        val offset = randomNodeTickOffset()
+        if (offset <= 0) {
+            applyActionNode(node.pos, node.type, node.plotName)
+            return
+        }
+
+        pendingActionNodePos = node.pos
+        pendingActionNodeType = node.type
+        pendingActionPlotName = node.plotName
+        pendingActionTicks = offset.toFloat()
+    }
+
+    private fun tickPendingActionNode() {
+        val pendingPos = pendingActionNodePos ?: return
+        pendingActionTicks -= TpsSync.getServerTicksPerClientTick()
+        if (pendingActionTicks <= 0f) {
+            applyActionNode(pendingPos, pendingActionNodeType, pendingActionPlotName)
+        }
+    }
+
+    private fun applyActionNode(pos: BlockPos, type: NodeType, plotName: String) {
+        clearPendingActionNode()
+        when (type) {
             NodeType.TP_TO_PLOT -> {
-                val plot = node.plotName.trim().ifEmpty { Settings.general.nodeTpPlotName.trim() }
+                val plot = plotName.trim().ifEmpty { Settings.general.nodeTpPlotName.trim() }
                 if (plot.isNotEmpty()) {
                     mc.player?.connection?.sendChatCommand("tptoplot $plot")
                     waitTicks = max(waitTicks, 40f)
                     lastAppliedMovementNodePos = null
-                    lastAppliedActionNodePos = node.pos
+                    lastAppliedActionNodePos = pos
                 }
             }
             else -> {}
@@ -910,6 +942,13 @@ object AutoFarm2 {
         pendingMovementTicks = 0f
     }
 
+    private fun clearPendingActionNode() {
+        pendingActionNodePos = null
+        pendingActionNodeType = NodeType.UNSET
+        pendingActionPlotName = ""
+        pendingActionTicks = 0f
+    }
+
     private fun resetNodeDelay() {
         lastAppliedMovementNodePos = null
         lastAppliedActionNodePos = null
@@ -917,6 +956,7 @@ object AutoFarm2 {
         pendingMovementVertical = NodeVerticalDirection.NONE
         pendingMovementHorizontal = NodeHorizontalDirection.NONE
         pendingMovementTicks = 0f
+        clearPendingActionNode()
     }
 
     private fun next() {
